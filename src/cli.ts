@@ -24,28 +24,45 @@ program
   )
   .version("0.1.0");
 
-// --- License gate ---
+// --- License helpers ---
+
+function hasValidLicense(): License | null {
+  const license = loadLicense();
+  if (!license) return null;
+  const check = validateLicense(license);
+  return check.valid ? license : null;
+}
+
+function printUpgradePrompt(feature: string): void {
+  console.log(
+    chalk.yellow(`\n🔒 ${feature} requires a license.\n`)
+  );
+  console.log(
+    "Purchase at: " +
+      chalk.bold("https://drakonsystems.com/products/agent-optimizer/buy")
+  );
+  console.log(
+    "Then activate: " +
+      chalk.dim("agent-optimizer activate <key>") +
+      "\n"
+  );
+  console.log(chalk.dim("Pricing:"));
+  for (const tier of PRICING) {
+    console.log(
+      `  ${tier.name.padEnd(20)} £${(tier.price / 100).toFixed(0).padStart(3)}  ${tier.description}`
+    );
+  }
+  console.log();
+}
 
 function requireLicense(command: string): License {
-  const license = loadLicense();
+  const license = hasValidLicense();
   if (!license) {
-    console.log(chalk.red("\n✗ No license found.\n"));
-    console.log("Purchase a license at: https://drakonsystems.com/agent-optimizer");
-    console.log("Then activate with: agent-optimizer activate <license-key>\n");
-    console.log(chalk.dim("Pricing:"));
-    for (const tier of PRICING) {
-      console.log(
-        `  ${tier.name.padEnd(20)} £${(tier.price / 100).toFixed(0).padStart(3)}  ${tier.description}`
-      );
-    }
-    console.log();
-    process.exit(1);
-  }
-
-  const check = validateLicense(license);
-  if (!check.valid) {
-    console.log(chalk.red(`\n✗ License invalid: ${check.reason}\n`));
-    console.log("Renew at: https://drakonsystems.com/agent-optimizer");
+    printUpgradePrompt(
+      command === "fleet" ? "Fleet audit" :
+      command === "optimize" ? "Auto-fix" :
+      "This feature"
+    );
     process.exit(1);
   }
 
@@ -53,7 +70,7 @@ function requireLicense(command: string): License {
     console.log(
       chalk.red("\n✗ Fleet audit requires a Fleet or Lifetime license.\n")
     );
-    console.log("Upgrade at: https://drakonsystems.com/agent-optimizer");
+    console.log("Upgrade at: https://drakonsystems.com/products/agent-optimizer/buy?tier=fleet");
     console.log(
       chalk.dim(`Current license: ${license.data.tier} (${license.data.email})`)
     );
@@ -72,14 +89,12 @@ program
   .action(async (key: string, opts: { email?: string }) => {
     console.log(chalk.bold("\n🔑 Drakon Systems — License Activation\n"));
 
-    // Validate key format: AO-XXXX-XXXXXXXX-XXXXXXXX
     if (!/^AO-[A-Z]{3,4}-[A-F0-9]{8}-[A-F0-9]{8}$/.test(key)) {
       console.log(chalk.red("Invalid key format."));
       console.log(chalk.dim("Expected: AO-XXXX-XXXXXXXX-XXXXXXXX"));
       process.exit(1);
     }
 
-    // Verify against the licensing server
     try {
       const response = await fetch(
         "https://drakonsystems.com/api/agent-optimizer/activate",
@@ -125,7 +140,9 @@ program
     const license = loadLicense();
     if (!license) {
       console.log(chalk.yellow("\nNo license installed.\n"));
-      console.log("Purchase: https://drakonsystems.com/agent-optimizer");
+      console.log("Free: " + chalk.white("agent-optimizer audit") + " and " + chalk.white("agent-optimizer scan"));
+      console.log("Paid: " + chalk.dim("optimize --fix, fleet"));
+      console.log("\nPurchase: https://drakonsystems.com/products/agent-optimizer/buy");
       console.log("Activate: agent-optimizer activate <key>\n");
       return;
     }
@@ -157,11 +174,11 @@ program
     }
   });
 
-// --- Core commands (license-gated) ---
+// --- Free commands (audit + scan show results, fixes are gated) ---
 
 program
   .command("audit")
-  .description("Run a full audit of your OpenClaw installation")
+  .description("Run a full audit of your OpenClaw installation (free)")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
@@ -169,40 +186,72 @@ program
   )
   .option("-a, --agent-dir <path>", "Path to agent directory")
   .option("--json", "Output results as JSON")
-  .option("--fix", "Apply safe fixes automatically")
+  .option("--fix", "Apply safe fixes automatically (requires license)")
   .option("--deep", "Include live gateway probes")
   .action(async (opts) => {
-    requireLicense("audit");
+    if (opts.fix) {
+      const license = hasValidLicense();
+      if (!license) {
+        // Run audit first to show them what they're missing, THEN gate the fix
+        console.log(chalk.bold("\n🔍 Drakon Systems — Agent Optimizer\n"));
+        const results = await runFullAudit(opts);
+        generateReport(results, { ...opts, fix: false });
+
+        const fixable = results.results.filter((r) => r.autoFixable);
+        if (fixable.length > 0) {
+          console.log(
+            chalk.yellow(
+              `\n🔒 ${fixable.length} issue(s) can be auto-fixed — but --fix requires a license.\n`
+            )
+          );
+        } else {
+          console.log(
+            chalk.yellow("\n🔒 --fix requires a license to apply changes.\n")
+          );
+        }
+        printUpgradePrompt("Auto-fix");
+        process.exit(1);
+      }
+    }
+
     console.log(chalk.bold("\n🔍 Drakon Systems — Agent Optimizer\n"));
     const results = await runFullAudit(opts);
     generateReport(results, opts);
-  });
 
-program
-  .command("optimize")
-  .description("Apply recommended optimizations")
-  .option(
-    "-c, --config <path>",
-    "Path to openclaw.json",
-    "~/.openclaw/openclaw.json"
-  )
-  .option("--dry-run", "Show what would change without applying")
-  .option(
-    "--profile <name>",
-    "Optimization profile: minimal | balanced | aggressive",
-    "balanced"
-  )
-  .action(async (opts) => {
-    requireLicense("optimize");
-    console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
-    const { runOptimize } = await import("./optimizers/index.js");
-    await runOptimize(opts);
+    // If no license, show the upsell after results
+    if (!hasValidLicense()) {
+      const warns = results.summary.warn;
+      const fails = results.summary.fail;
+      if (warns > 0 || fails > 0) {
+        console.log(
+          chalk.dim(
+            "─────────────────────────────────────────────────────"
+          )
+        );
+        console.log(
+          chalk.yellow(
+            `\n🦞 Found ${fails} critical and ${warns} warnings. Want to fix them automatically?`
+          )
+        );
+        console.log(
+          `   Run: ${chalk.white("agent-optimizer optimize")} to see recommended changes`
+        );
+        console.log(
+          `   Run: ${chalk.white("agent-optimizer audit --fix")} to auto-fix (requires license)\n`
+        );
+        console.log(
+          chalk.dim(
+            "   License: https://drakonsystems.com/products/agent-optimizer/buy\n"
+          )
+        );
+      }
+    }
   });
 
 program
   .command("scan")
   .description(
-    "Scan installed skills and plugins for billing, malware, or suspicious patterns"
+    "Scan installed skills and plugins for billing, malware, or suspicious patterns (free)"
   )
   .option(
     "-c, --config <path>",
@@ -211,15 +260,82 @@ program
   )
   .option("--workspace <path>", "Path to workspace directory")
   .action(async (opts) => {
-    requireLicense("scan");
     console.log(chalk.bold("\n🛡️  Drakon Systems — Security Scanner\n"));
     const { runSecurityScan } = await import("./auditors/security-scan.js");
-    await runSecurityScan(opts);
+    const results = await runSecurityScan(opts);
+
+    if (!hasValidLicense() && results.length > 0) {
+      const suspicious = results.filter((r) => r.status === "warn" || r.status === "fail");
+      if (suspicious.length > 0) {
+        console.log(
+          chalk.dim(
+            "\n─────────────────────────────────────────────────────"
+          )
+        );
+        console.log(
+          chalk.yellow(
+            `\n🦞 Found ${suspicious.length} suspicious pattern(s). Full fleet scanning available with a license.`
+          )
+        );
+        console.log(
+          chalk.dim(
+            "   https://drakonsystems.com/products/agent-optimizer/buy\n"
+          )
+        );
+      }
+    }
+  });
+
+// --- Paid commands ---
+
+program
+  .command("optimize")
+  .description("Apply recommended optimizations (requires license)")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .option("--dry-run", "Preview changes without applying")
+  .option(
+    "--profile <name>",
+    "Optimization profile: minimal | balanced | aggressive",
+    "balanced"
+  )
+  .action(async (opts) => {
+    if (opts.dryRun) {
+      // Dry-run is free — let them see what they'd save
+      console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
+      const { runOptimize } = await import("./optimizers/index.js");
+      await runOptimize({ ...opts, dryRun: true });
+
+      if (!hasValidLicense()) {
+        console.log(
+          chalk.yellow(
+            "\n🔒 To apply these changes, activate a license:\n"
+          )
+        );
+        console.log(
+          `   ${chalk.dim("agent-optimizer activate <key>")}`
+        );
+        console.log(
+          chalk.dim(
+            "   https://drakonsystems.com/products/agent-optimizer/buy\n"
+          )
+        );
+      }
+      return;
+    }
+
+    requireLicense("optimize");
+    console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
+    const { runOptimize } = await import("./optimizers/index.js");
+    await runOptimize(opts);
   });
 
 program
   .command("fleet")
-  .description("Audit multiple OpenClaw instances via SSH")
+  .description("Audit multiple OpenClaw instances via SSH (requires Fleet/Lifetime license)")
   .option("--hosts <hosts>", "Comma-separated list of SSH hosts")
   .option("--ssh-config <path>", "Path to SSH config file", "~/.ssh/config")
   .option("--json", "Output results as JSON")
