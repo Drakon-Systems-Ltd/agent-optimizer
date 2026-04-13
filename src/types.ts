@@ -31,6 +31,7 @@ export interface OpenClawConfig {
     installs?: Record<string, PluginInstall>;
   };
   gateway?: Record<string, unknown>;
+  channels?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

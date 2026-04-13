@@ -6,6 +6,10 @@ import { auditTokenEfficiency } from "./token-efficiency.js";
 import { auditPlugins } from "./plugins.js";
 import { auditLegacyOverrides } from "./legacy-overrides.js";
 import { auditToolPermissions } from "./tool-permissions.js";
+import { auditCostEstimate } from "./cost-estimator.js";
+import { auditCacheEfficiency } from "./cache-efficiency.js";
+import { auditBootstrapFiles } from "./bootstrap-files.js";
+import { auditChannelSecurity } from "./channel-security.js";
 
 export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   const config = loadConfig(opts.config);
@@ -19,10 +23,14 @@ export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
 
   results.push(...auditModelConfig(config));
   results.push(...auditAuthProfiles(config, agentDir));
+  results.push(...auditCostEstimate(config, agentDir));
   results.push(...auditTokenEfficiency(config));
+  results.push(...auditCacheEfficiency(config));
+  results.push(...auditBootstrapFiles(config));
   results.push(...auditPlugins(config));
   results.push(...auditLegacyOverrides(config, agentDir));
   results.push(...auditToolPermissions(config));
+  results.push(...auditChannelSecurity(config));
 
   const summary = {
     total: results.length,
