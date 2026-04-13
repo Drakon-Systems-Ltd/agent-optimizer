@@ -238,10 +238,10 @@ program
           )
         );
         console.log(
-          `   Run: ${chalk.white("agent-optimizer optimize")} to see recommended changes`
+          `   Run: ${chalk.white("agent-optimizer optimize")} to preview recommended changes (free)`
         );
         console.log(
-          `   Run: ${chalk.white("agent-optimizer audit --fix")} to auto-fix (requires license)\n`
+          `   Run: ${chalk.white("agent-optimizer audit --fix")} to auto-apply fixes (requires license)\n`
         );
         console.log(
           chalk.dim(
@@ -294,7 +294,7 @@ program
 
 program
   .command("optimize")
-  .description("Apply recommended optimizations (requires license)")
+  .description("Preview or apply recommended optimizations")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
@@ -307,34 +307,30 @@ program
     "balanced"
   )
   .action(async (opts) => {
-    if (opts.dryRun) {
-      // Dry-run is free — let them see what they'd save
-      console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
-      const { runOptimize } = await import("./optimizers/index.js");
-      await runOptimize({ ...opts, dryRun: true });
+    const licensed = hasValidLicense();
 
-      if (!hasValidLicense()) {
-        console.log(
-          chalk.yellow(
-            "\n🔒 To apply these changes, activate a license:\n"
-          )
-        );
-        console.log(
-          `   ${chalk.dim("agent-optimizer activate <key>")}`
-        );
-        console.log(
-          chalk.dim(
-            "   https://drakonsystems.com/products/agent-optimizer/buy\n"
-          )
-        );
-      }
-      return;
-    }
+    // If no license, always run as dry-run (free preview)
+    const effectiveDryRun = opts.dryRun || !licensed;
 
-    requireLicense("optimize");
     console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
     const { runOptimize } = await import("./optimizers/index.js");
-    await runOptimize(opts);
+    await runOptimize({ ...opts, dryRun: effectiveDryRun });
+
+    if (!licensed) {
+      console.log(
+        chalk.yellow(
+          "\n🔒 To apply these changes, activate a license:\n"
+        )
+      );
+      console.log(
+        `   ${chalk.dim("agent-optimizer activate <key>")}`
+      );
+      console.log(
+        chalk.dim(
+          "   https://drakonsystems.com/products/agent-optimizer/buy\n"
+        )
+      );
+    }
   });
 
 program
