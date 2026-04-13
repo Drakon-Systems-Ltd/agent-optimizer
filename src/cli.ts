@@ -178,6 +178,39 @@ program
     }
   });
 
+program
+  .command("update")
+  .description("Check for updates and install the latest version")
+  .action(async () => {
+    console.log(chalk.bold("\n🦞 Agent Optimizer — Update\n"));
+    console.log(`  Current: v${version}\n`);
+    console.log("  Checking for updates...");
+
+    const { execSync } = await import("child_process");
+    try {
+      const latest = execSync("npm view @drakon-systems/agent-optimizer version", {
+        encoding: "utf-8",
+        timeout: 15000,
+      }).trim();
+
+      if (latest === version) {
+        console.log(chalk.green(`  ✓ Already on latest (v${version})\n`));
+        return;
+      }
+
+      console.log(`  New version available: ${chalk.white(`v${latest}`)} (current: v${version})\n`);
+      console.log("  Installing...");
+      execSync("npm install -g @drakon-systems/agent-optimizer@latest", {
+        stdio: "pipe",
+        timeout: 60000,
+      });
+      console.log(chalk.green(`\n  ✓ Updated to v${latest}\n`));
+    } catch (e) {
+      console.log(chalk.red(`\n  ✗ Update failed: ${(e as Error).message.split("\n")[0]}`));
+      console.log(chalk.dim("  Try manually: npm install -g @drakon-systems/agent-optimizer@latest\n"));
+    }
+  });
+
 // --- Free commands (audit + scan show results, fixes are gated) ---
 
 program
