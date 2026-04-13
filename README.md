@@ -1,5 +1,11 @@
 # 🦞 Agent Optimizer by Drakon Systems
 
+[![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
+[![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
+[![tests](https://img.shields.io/badge/tests-83%20passing-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-v2026.4.12-cc3534)](https://github.com/openclaw/openclaw)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+
 **Stop burning money on misconfigured OpenClaw agents.**
 
 Audit, optimize, and secure your OpenClaw deployment. One install, one command, full report. Built from real-world fleet management of 5 AI agents across 4 servers.
