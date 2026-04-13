@@ -1,11 +1,16 @@
 {
   "name": "@drakon-systems/agent-optimizer",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "OpenClaw Agent Optimizer — audit, optimize, and secure OpenClaw deployments",
   "type": "module",
   "bin": {
-    "agent-optimizer": "./dist/cli.js"
+    "agent-optimizer": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
@@ -23,7 +28,7 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Drakon-Systems-Ltd/agent-optimizer"
+    "url": "git+https://github.com/Drakon-Systems-Ltd/agent-optimizer.git"
   },
   "engines": {
     "node": ">=20"

@@ -15,6 +15,10 @@ import {
 } from "./licensing/index.js";
 import type { License, LicenseData } from "./licensing/index.js";
 
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json");
+
 const program = new Command();
 
 program
@@ -22,7 +26,7 @@ program
   .description(
     "OpenClaw Agent Optimizer by Drakon Systems — audit, optimize, and secure your OpenClaw deployment"
   )
-  .version("0.1.0");
+  .version(version);
 
 // --- License helpers ---
 

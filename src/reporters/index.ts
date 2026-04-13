@@ -1,5 +1,9 @@
 import chalk from "chalk";
+import { createRequire } from "module";
 import type { AuditReport } from "../types.js";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../../package.json");
 
 const STATUS_ICONS: Record<string, string> = {
   pass: chalk.green("✓"),
@@ -55,6 +59,6 @@ export function generateReport(
   }
 
   console.log(
-    chalk.dim(`\n🔍 Drakon Systems Agent Optimizer v0.1.0 — ${report.timestamp}\n`)
+    chalk.dim(`\n🔍 Drakon Systems Agent Optimizer v${version} — ${report.timestamp}\n`)
   );
 }
