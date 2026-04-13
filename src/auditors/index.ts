@@ -10,6 +10,7 @@ import { auditCostEstimate } from "./cost-estimator.js";
 import { auditCacheEfficiency } from "./cache-efficiency.js";
 import { auditBootstrapFiles } from "./bootstrap-files.js";
 import { auditChannelSecurity } from "./channel-security.js";
+import { auditProviderFailover } from "./provider-failover.js";
 
 export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   const config = loadConfig(opts.config);
@@ -30,6 +31,7 @@ export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   results.push(...auditPlugins(config));
   results.push(...auditLegacyOverrides(config, agentDir));
   results.push(...auditToolPermissions(config));
+  results.push(...auditProviderFailover(config, agentDir));
   results.push(...auditChannelSecurity(config));
 
   const summary = {

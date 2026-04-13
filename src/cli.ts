@@ -432,6 +432,65 @@ program
     console.log(chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
   });
 
+// --- Snapshot & drift ---
+
+const snapshot = program
+  .command("snapshot")
+  .description("Save or list config snapshots for drift detection");
+
+snapshot
+  .command("save")
+  .description("Save the current config as a named snapshot")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .option("--name <name>", "Snapshot name", "golden")
+  .action(async (opts) => {
+    console.log(chalk.bold("\n📸 Drakon Systems — Config Snapshot\n"));
+    const { saveSnapshot } = await import("./auditors/config-drift.js");
+    saveSnapshot(opts.config, opts.name);
+  });
+
+snapshot
+  .command("list")
+  .description("List saved snapshots")
+  .action(async () => {
+    const { listSnapshots } = await import("./auditors/config-drift.js");
+    listSnapshots();
+  });
+
+program
+  .command("drift")
+  .description("Compare current config against a saved snapshot")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .option("--name <name>", "Snapshot name to compare against", "golden")
+  .action(async (opts) => {
+    console.log(chalk.bold("\n🔍 Drakon Systems — Config Drift Detection\n"));
+    const { detectDrift } = await import("./auditors/config-drift.js");
+    const results = detectDrift(opts.config, opts.name);
+    generateReport(
+      {
+        timestamp: new Date().toISOString(),
+        host: "localhost",
+        openclawVersion: "unknown",
+        results,
+        summary: {
+          total: results.length,
+          pass: results.filter((r) => r.status === "pass").length,
+          warn: results.filter((r) => r.status === "warn").length,
+          fail: results.filter((r) => r.status === "fail").length,
+        },
+      },
+      { json: opts.json }
+    );
+  });
+
 program
   .command("fleet")
   .description("Audit multiple OpenClaw instances via SSH (requires Fleet/Lifetime license)")
