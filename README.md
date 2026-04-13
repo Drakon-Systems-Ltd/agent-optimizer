@@ -6,6 +6,8 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
+**55+ checks. 12 auditor modules. 82 tests.**
+
 ## Install
 
 Works on macOS, Linux, and Windows. Requires Node.js 20+.
@@ -27,60 +29,96 @@ agent-optimizer optimize --dry-run
 
 # Scan skills and plugins for malware and hidden billing (also free)
 agent-optimizer scan
+
+# Save a golden config baseline
+agent-optimizer snapshot save --name golden
+
+# Check for config drift after an update
+agent-optimizer drift --name golden
+```
+
+## Full Command Reference
+
+### Free Commands (no license needed)
+
+```bash
+agent-optimizer audit                              # Full 55+ check audit
+agent-optimizer audit --json                       # Machine-readable output
+agent-optimizer audit --deep                       # Include live gateway probes
+agent-optimizer scan                               # Security scan skills/plugins/hooks
+agent-optimizer scan --workspace ~/clawd            # Scan specific workspace
+agent-optimizer optimize --dry-run                 # Preview optimization changes
+agent-optimizer optimize --dry-run --profile aggressive  # Preview aggressive profile
+agent-optimizer drift --name golden                # Compare config against snapshot
+agent-optimizer snapshot save --name golden        # Save config baseline
+agent-optimizer snapshot list                      # List saved snapshots
+agent-optimizer license                            # Show license status
+agent-optimizer update                             # Check for updates
+```
+
+### Licensed Commands (Solo £29+)
+
+```bash
+agent-optimizer audit --fix                        # Auto-apply safe fixes
+agent-optimizer optimize                           # Apply balanced optimizations
+agent-optimizer optimize --profile aggressive      # Maximum token savings
+agent-optimizer optimize --only heartbeat          # Fix only heartbeat
+agent-optimizer optimize --only context,pruning    # Fix specific areas
+agent-optimizer optimize --skip subagents          # Fix everything except subagents
+agent-optimizer rollback                           # Restore pre-optimize backup
+agent-optimizer activate AO-XXXX-XXXXXXXX-XXXXXXXX # Activate license
+agent-optimizer deactivate                         # Remove license
+```
+
+### Fleet Commands (Fleet £79+ / Lifetime £149)
+
+```bash
+agent-optimizer fleet --hosts jarvis,edith,tars    # Audit entire fleet via SSH
+agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 ```
 
 ## What's Free vs Paid
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` | Full results | Full results | Full results | Full results |
+| `audit` (55+ checks) | Full results | Full results | Full results | Full results |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
-| `scan` | Full results | Full results | Full results | Full results |
+| `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
-| `optimize` | Blocked | Applies changes | Applies changes | Applies changes |
-| `fleet --hosts` | Blocked | Blocked | SSH fleet audit | SSH fleet audit |
+| `optimize` | Preview only | Applies changes | Applies changes | Applies changes |
+| `drift` | Full results | Full results | Full results | Full results |
+| `snapshot` | Save & list | Save & list | Save & list | Save & list |
+| `fleet --hosts` | - | - | SSH fleet audit | SSH fleet audit |
+| `rollback` | - | Yes | Yes | Yes |
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
 The free audit is the full product — every check, every result, every fix instruction. You only pay when you want the tool to apply fixes automatically.
 
-## Commands
+## What It Audits
 
-### `agent-optimizer audit`
+| Auditor | Checks |
+|---------|--------|
+| **Model Config** | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault, unknown keys |
+| **Auth Profiles** | Token expiry, duplicate keys, provider coverage for primary model |
+| **Cost Estimator** | Monthly spend estimate, savings projection, expensive fallback warnings, subscription detection |
+| **Token Efficiency** | Context window sizing, heartbeat frequency, subagent concurrency, compaction, pruning |
+| **Cache Efficiency** | cacheRetention config, heartbeat vs cache TTL alignment, lightContext, compaction model cost |
+| **Bootstrap Files** | Per-file size vs 20K limit, total vs 150K budget, truncation warnings, missing SOUL/IDENTITY |
+| **Security Scanner** | 28 patterns: billing, injection, obfuscation, exfiltration. Per-skill scoring. Provenance detection |
+| **Plugins** | Stale installs, allowlist gaps, orphaned entries |
+| **Legacy Overrides** | Codex transport override, hardcoded API keys in models.json |
+| **Tool Permissions** | Allow/deny conflicts, elevated channel restrictions |
+| **Provider Failover** | Chain depth, provider diversity, auth coverage, cost escalation, latency risk |
+| **Channel Security** | DM/group policies, allowlist gaps, mutable ID warnings |
 
-Full health check of your OpenClaw installation. **Free — no license needed.**
-
-```bash
-agent-optimizer audit
-agent-optimizer audit --config ~/.openclaw/openclaw.json
-agent-optimizer audit --json
-agent-optimizer audit --fix          # Auto-fix (requires license)
-agent-optimizer audit --deep         # Include live gateway probes
-```
-
-**What it checks:**
-
-| Category | Checks |
-|----------|--------|
-| Model Config | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault validation, unknown config keys |
-| Auth Profiles | Token expiry, duplicate keys, auth coverage for primary model |
-| Token Efficiency | Context window sizing, heartbeat frequency, subagent concurrency, compaction, pruning |
-| Plugins | Stale installs, allowlist gaps, orphaned entries |
-| Legacy Overrides | Codex transport override (api/baseUrl), hardcoded API keys in models.json |
-| Tool Permissions | Allow/deny conflicts, elevated channel restrictions |
-
-### `agent-optimizer optimize`
-
-Token-saving optimizations with configurable profiles.
+## Optimize Profiles
 
 ```bash
-agent-optimizer optimize --dry-run                # Preview (free)
-agent-optimizer optimize                          # Apply balanced (requires license)
-agent-optimizer optimize --profile aggressive     # Maximum savings
-agent-optimizer optimize --profile minimal        # Light touch
+agent-optimizer optimize --profile minimal         # Light touch
+agent-optimizer optimize --profile balanced        # Recommended (default)
+agent-optimizer optimize --profile aggressive      # Maximum savings
 ```
-
-**Profiles:**
 
 | Profile | Context | Heartbeat | Subagents | Pruning TTL |
 |---------|---------|-----------|-----------|-------------|
@@ -88,52 +126,35 @@ agent-optimizer optimize --profile minimal        # Light touch
 | balanced | 200K | 6h | 4 | 2h |
 | aggressive | 100K | 12h | 2 | 30m |
 
-Automatically backs up your config before applying changes.
-
-### `agent-optimizer scan`
-
-Security scanner for installed skills, plugins, and hooks. **Free — no license needed.**
+Use `--only` and `--skip` to cherry-pick:
 
 ```bash
-agent-optimizer scan
-agent-optimizer scan --workspace ~/clawd
+agent-optimizer optimize --only heartbeat,pruning  # Just these two
+agent-optimizer optimize --skip context            # Everything except context
 ```
 
-**Detects:**
-- Hidden billing integrations (SkillPay, USDT, charge functions)
-- Suspicious HTTP calls to non-standard endpoints
-- eval() usage and shell execution patterns
-- External data exfiltration patterns
+Tags: `context`, `heartbeat`, `subagents`, `compaction`, `pruning`
 
-We built this after finding a ClawHub skill silently charging 0.001 USDT per API call via SkillPay.me.
+## Config Drift Detection
 
-### `agent-optimizer fleet`
-
-Audit multiple OpenClaw instances via SSH. **Requires Fleet or Lifetime license.**
+Save a known-good config as a baseline, then check for drift after updates:
 
 ```bash
-agent-optimizer fleet --hosts jarvis,edith,tars,case
+# After setting up your agent perfectly
+agent-optimizer snapshot save --name golden
+
+# After an openclaw update or config change
+agent-optimizer drift --name golden
 ```
 
-**Reports per host:**
-- Agent name and primary model
-- Heartbeat frequency and context token count
-- Legacy Codex transport override detection
-- Gateway status (active/inactive)
-
-Requires SSH access configured in `~/.ssh/config`.
+Tracks 15+ config fields including model, fallbacks, context, heartbeat, compaction, plugins, and tool permissions. Flags critical changes to model selection and plugin allowlists.
 
 ## Licensing
 
 ```bash
-# Check license status
-agent-optimizer license
-
-# Activate after purchase
-agent-optimizer activate AO-FLEE-A1B2C3D4-E5F6G7H8
-
-# Remove license
-agent-optimizer deactivate
+agent-optimizer license                            # Check status
+agent-optimizer activate AO-FLEE-A1B2C3D4-E5F6G7H8 # Activate
+agent-optimizer deactivate                         # Remove
 ```
 
 Purchase at [drakonsystems.com/products/agent-optimizer](https://drakonsystems.com/products/agent-optimizer).
@@ -151,30 +172,35 @@ Model Config
   ✓ Primary model set: Primary: openai-codex/gpt-5.4
   ✓ Cross-provider fallback: Fallbacks include multiple providers
 
-Auth
-  ✓ Token expiry: openai-codex:default: Valid for 116h
-  ⚠ Token expiry: claude-cli:main: OAuth token expires in 45m
+Cost Estimate
+  ✓ Primary model cost: openai-codex/gpt-5.4 uses subscription — no per-token cost
+
+Provider Failover
+  ✓ Fallback depth: 4 fallback models configured
+  ✓ Provider diversity: 4 providers
+  ⚠ Auth: anthropic:claude-cli: OAuth token expired 25h ago
 
 Token Efficiency
-  ⚠ Context window size: contextTokens is 1000K — burns tokens on every turn
-    Fix: Consider reducing to 200K unless you need deep history
-  ✓ Heartbeat frequency: Heartbeat: 6h
-  ✓ Subagent concurrency: Subagent concurrency: 4
+  ⚠ Heartbeat: 1h = ~24 turns/day of idle token burn
 
-Legacy Overrides
-  ✗ Codex transport override: Legacy openai-codex transport override detected
-    Fix: Remove "api" and "baseUrl" from openai-codex in models.json
+Cache Efficiency
+  ✓ cache-ttl pruning enabled (TTL: 2h)
+  ✓ Compaction model: claude-cli/claude-sonnet-4-6
+
+Bootstrap Files
+  ✓ SOUL.md: 4.4K chars (22% of limit)
+  ✓ TOOLS.md: 0.9K chars (4% of limit)
+  ✓ Total: 13.2K chars (9% of 150K budget)
+
+Channel Security
+  ⚠ No default DM policy set
 
 ─── Summary ───
-  8 pass  3 warn  1 fail  Total: 12
+  23 pass  8 warn  1 fail  Total: 46
 
-⚠ Critical issues found — fix before deploying
-
-🦞 Found 1 critical and 3 warnings. Want to fix them automatically?
-   Run: agent-optimizer optimize to see recommended changes
-   Run: agent-optimizer audit --fix to auto-fix (requires license)
-
-   License: https://drakonsystems.com/products/agent-optimizer/buy
+🦞 Found 1 critical and 8 warnings. Want to fix them automatically?
+   Run: agent-optimizer optimize to preview changes (free)
+   Run: agent-optimizer audit --fix to auto-apply (requires license)
 ```
 
 ## Development
@@ -183,7 +209,7 @@ Legacy Overrides
 npm install
 npx tsx src/cli.ts audit              # Run without building
 npm run build                          # Compile TypeScript
-npm test                               # Run tests (31 passing)
+npm test                               # Run tests (82 passing)
 ```
 
 ## License
