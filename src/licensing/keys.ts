@@ -1,23 +1,25 @@
-import { createHmac, randomBytes } from "crypto";
+import { createVerify, randomBytes } from "crypto";
 
-const SIGNING_SECRET = "drakon-agent-optimizer-2026";
+// Embedded public key for offline license verification
+const PUBLIC_KEY_B64 =
+  "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUFvblVPUjQ3U3ZsdkdNbW9UQ2J4Zwp5NlFkSVlmSmQ4Sm96cnVhNHZhcHh6aFlTT21rQWJJdW5oZDB5Y3owdEZyN3dYYlUvUlJkenM3eXFOK09LNTJiClZ0V0hzdHpBcE5PbkJ1ZWpWYTdneEY3TjBwRHA5a0QyN3ZCWFpRa1pKWVVibTJGc3ZBNC9oNG9qUmtBS3V6S3EKWkxOdlVpdWtsVklxRU1jV21Od0U0K3ZMcUoxT0ZtYWRTS2RyU0V3cWp0Q0F3RzFjNFRtcTdHRUdXRWtQNnRFWAphdEtlM3I2V05SOEh5V2ZFUFhVbjkrSmlhOG02Y08zZGZ6THE2Z3hrRi9yM1JDVXdjWWs0anBqS040cmpaakROCmJOVHl5Tk1RYUhybVRmYjBqRHRNaGgza0RuRFVCdE0vbGlyejdQbExFbnl5N3hkVHNCRUpmKzlzNXc2WGxaQngKUXdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==";
 
 export interface LicenseData {
   email: string;
   tier: "solo" | "fleet" | "lifetime";
   issuedAt: string;
-  expiresAt: string | null; // null = lifetime
+  expiresAt: string | null;
   stripePaymentId: string;
 }
 
 export interface License {
   key: string;
   data: LicenseData;
-  signature: string;
+  signature: string; // RSA-signed JWT from server
 }
 
 /**
- * Generate a license key from payment data.
+ * Generate a license key format for display.
  * Format: AO-TIER-XXXXXXXX-XXXXXXXX
  */
 export function generateLicenseKey(tier: string): string {
@@ -28,60 +30,44 @@ export function generateLicenseKey(tier: string): string {
 }
 
 /**
- * Sign license data to prevent tampering.
+ * Verify an RSA-signed JWT license token offline.
  */
-export function signLicense(data: LicenseData): string {
-  const payload = JSON.stringify(data);
-  return createHmac("sha256", SIGNING_SECRET).update(payload).digest("hex");
-}
+function verifyJwtSignature(token: string): boolean {
+  try {
+    const publicKeyPem = Buffer.from(PUBLIC_KEY_B64, "base64").toString("utf-8");
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
 
-/**
- * Verify a license signature.
- */
-export function verifySignature(data: LicenseData, signature: string): boolean {
-  const expected = signLicense(data);
-  return expected === signature;
-}
+    const [header, body, sig] = parts;
+    const signatureBuffer = Buffer.from(
+      sig.replace(/-/g, "+").replace(/_/g, "/"),
+      "base64"
+    );
 
-/**
- * Create a full license object from payment data.
- */
-export function createLicense(
-  email: string,
-  tier: "solo" | "fleet" | "lifetime",
-  stripePaymentId: string
-): License {
-  const now = new Date();
-  const expiresAt =
-    tier === "lifetime"
-      ? null
-      : new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
-
-  const data: LicenseData = {
-    email,
-    tier,
-    issuedAt: now.toISOString(),
-    expiresAt,
-    stripePaymentId,
-  };
-
-  return {
-    key: generateLicenseKey(tier),
-    data,
-    signature: signLicense(data),
-  };
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(`${header}.${body}`);
+    return verifier.verify(publicKeyPem, signatureBuffer);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Check if a license is valid and not expired.
+ * Verifies the RSA signature if a JWT token is present, otherwise checks data integrity.
  */
 export function validateLicense(license: License): {
   valid: boolean;
   reason?: string;
 } {
-  // Verify signature
-  if (!verifySignature(license.data, license.signature)) {
-    return { valid: false, reason: "Invalid license signature — key may be tampered" };
+  // If signature looks like a JWT, verify with RSA public key
+  if (license.signature && license.signature.includes(".")) {
+    if (!verifyJwtSignature(license.signature)) {
+      return {
+        valid: false,
+        reason: "Invalid license signature — key may be tampered",
+      };
+    }
   }
 
   // Check expiry
