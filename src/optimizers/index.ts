@@ -145,4 +145,5 @@ export async function runOptimize(opts: OptimizeOptions): Promise<void> {
   writeFileSync(configPath, JSON.stringify(config, null, 2));
   console.log(chalk.green(`\n✓ Applied ${optimizations.length} optimization(s)`));
   console.log(chalk.dim("Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
+  console.log(chalk.dim("Something wrong? Rollback with: agent-optimizer rollback"));
 }

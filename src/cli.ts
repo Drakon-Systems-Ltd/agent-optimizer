@@ -367,6 +367,62 @@ program
   });
 
 program
+  .command("rollback")
+  .description("Restore config from the last pre-optimize backup")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (opts) => {
+    const { existsSync, copyFileSync, readFileSync } = await import("fs");
+    const { expandPath } = await import("./utils/config.js");
+
+    const configPath = expandPath(opts.config);
+    const backupPath = `${configPath}.pre-optimize.bak`;
+
+    console.log(chalk.bold("\n🔄 Drakon Systems — Rollback\n"));
+
+    if (!existsSync(backupPath)) {
+      console.log(chalk.yellow("  No backup found."));
+      console.log(chalk.dim(`  Expected: ${backupPath}`));
+      console.log(chalk.dim("  Backups are created automatically when you run: agent-optimizer optimize\n"));
+      process.exit(1);
+    }
+
+    // Show what's different
+    try {
+      const current = JSON.parse(readFileSync(configPath, "utf-8"));
+      const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
+
+      const currentCtx = current.agents?.defaults?.contextTokens;
+      const backupCtx = backup.agents?.defaults?.contextTokens;
+      const currentHb = current.agents?.defaults?.heartbeat?.every;
+      const backupHb = backup.agents?.defaults?.heartbeat?.every;
+
+      if (currentCtx !== backupCtx || currentHb !== backupHb) {
+        console.log("  Changes that will be reverted:");
+        if (currentCtx !== backupCtx) {
+          console.log(`    contextTokens: ${currentCtx} → ${backupCtx}`);
+        }
+        if (currentHb !== backupHb) {
+          console.log(`    heartbeat: ${currentHb} → ${backupHb}`);
+        }
+        console.log();
+      }
+    } catch {
+      // Can't diff — just restore
+    }
+
+    // Restore
+    copyFileSync(backupPath, configPath);
+    console.log(chalk.green("  ✓ Config restored from backup"));
+    console.log(chalk.dim(`  Restored: ${configPath}`));
+    console.log(chalk.dim(`  From:     ${backupPath}\n`));
+    console.log(chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
+  });
+
+program
   .command("fleet")
   .description("Audit multiple OpenClaw instances via SSH (requires Fleet/Lifetime license)")
   .option("--hosts <hosts>", "Comma-separated list of SSH hosts")
