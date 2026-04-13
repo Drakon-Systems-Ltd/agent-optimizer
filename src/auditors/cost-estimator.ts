@@ -12,6 +12,8 @@ const MODEL_COSTS: Record<string, { input: number; output: number; cached?: numb
   "claude-cli/claude-sonnet-4-6": { input: 0, output: 0 }, // subscription
   "claude-cli/claude-sonnet-4-5": { input: 0, output: 0 }, // subscription
   "openai-codex/gpt-5.4": { input: 0, output: 0 }, // subscription
+  "codex/gpt-5.4": { input: 0, output: 0 }, // bundled Codex provider (v2026.4.12+)
+  "codex/gpt-4o": { input: 0, output: 0 }, // bundled Codex provider
   "openai/gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
   "openai/gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
   "openrouter/moonshotai/kimi-k2.5": { input: 1.0, output: 4.0 },
@@ -28,6 +30,11 @@ const CACHE_HIT_RATE = 0.6; // 60% cache hit on system prompt
 function getModelCost(model: string): { input: number; output: number; cached: number } | null {
   const direct = MODEL_COSTS[model];
   if (direct) return { input: direct.input, output: direct.output, cached: direct.cached ?? direct.input };
+
+  // Self-hosted / local models are free
+  if (model.startsWith("lm-studio/") || model.startsWith("ollama/")) {
+    return { input: 0, output: 0, cached: 0 };
+  }
 
   // Check models.json for cost overrides
   return null;
@@ -86,11 +93,14 @@ export function auditCostEstimate(config: OpenClawConfig, agentDir?: string): Au
   if (!estimate) {
     const cost = getModelCost(primary);
     if (cost && cost.input === 0) {
+      const isLocal = primary.startsWith("lm-studio/") || primary.startsWith("ollama/");
       results.push({
         category: "Cost Estimate",
         check: "Primary model cost",
         status: "pass",
-        message: `${primary} uses subscription billing — no per-token cost`,
+        message: isLocal
+          ? `${primary} is self-hosted — no per-token cost`
+          : `${primary} uses subscription billing — no per-token cost`,
       });
     } else {
       results.push({
@@ -150,9 +160,9 @@ export function auditCostEstimate(config: OpenClawConfig, agentDir?: string): Au
   }
 
   // Check if subscription models are available but not primary
-  const isSubscription = primary.startsWith("claude-cli/") || primary.startsWith("openai-codex/");
+  const isSubscription = primary.startsWith("claude-cli/") || primary.startsWith("openai-codex/") || primary.startsWith("codex/") || primary.startsWith("lm-studio/");
   if (!isSubscription && estimate) {
-    const hasSubFallback = fallbacks.some((f) => f.startsWith("claude-cli/") || f.startsWith("openai-codex/"));
+    const hasSubFallback = fallbacks.some((f) => f.startsWith("claude-cli/") || f.startsWith("openai-codex/") || f.startsWith("codex/"));
     if (hasSubFallback) {
       results.push({
         category: "Cost Estimate",

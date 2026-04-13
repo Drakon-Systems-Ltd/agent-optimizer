@@ -49,7 +49,7 @@ describe("auditPlugins", () => {
     ).toBe(true);
   });
 
-  it("reports allow entries without installs or entries as bundled", () => {
+  it("reports known bundled plugins as pass", () => {
     const config: OpenClawConfig = {
       plugins: {
         allow: ["telegram", "browser"],
@@ -59,7 +59,21 @@ describe("auditPlugins", () => {
     };
     const results = auditPlugins(config);
     expect(
-      results.some((r) => r.status === "info" && r.message.includes("bundled"))
+      results.some((r) => r.status === "pass" && r.message.includes("bundled"))
+    ).toBe(true);
+  });
+
+  it("reports unknown plugins without installs as info", () => {
+    const config: OpenClawConfig = {
+      plugins: {
+        allow: ["some-custom-plugin"],
+        entries: {},
+        installs: {},
+      },
+    };
+    const results = auditPlugins(config);
+    expect(
+      results.some((r) => r.status === "info" && r.check.includes("some-custom-plugin"))
     ).toBe(true);
   });
 });

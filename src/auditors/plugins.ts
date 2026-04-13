@@ -1,5 +1,11 @@
 import type { AuditResult, OpenClawConfig } from "../types.js";
 
+// Bundled plugins that don't require an install entry
+const BUNDLED_PLUGINS = [
+  "memory-wiki", "memory-core", "browser", "telegram", "whatsapp",
+  "discord", "matrix", "imessage", "voice", "dreaming", "active-memory",
+];
+
 export function auditPlugins(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];
   const plugins = config.plugins;
@@ -42,11 +48,14 @@ export function auditPlugins(config: OpenClawConfig): AuditResult[] {
     const hasInstall = name in installs;
     const hasEntry = name in entries;
     if (!hasInstall && !hasEntry) {
+      const isBundled = BUNDLED_PLUGINS.includes(name);
       results.push({
         category: "Plugins",
         check: `Plugin exists: ${name}`,
-        status: "info",
-        message: `"${name}" is in plugins.allow but has no install or entry — may be a bundled plugin`,
+        status: isBundled ? "pass" : "info",
+        message: isBundled
+          ? `"${name}" is a bundled plugin — no install needed`
+          : `"${name}" is in plugins.allow but has no install or entry — may be a bundled or third-party plugin`,
       });
     }
   }

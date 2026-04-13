@@ -75,6 +75,22 @@ export function auditLegacyOverrides(
     }
   }
 
+  // Check for allowPrivateNetwork on non-local providers (v2026.4.12+)
+  for (const [providerName, provider] of Object.entries(providers)) {
+    const request = provider.request as Record<string, unknown> | undefined;
+    if (request?.allowPrivateNetwork === true) {
+      const isLocalProvider = providerName === "lm-studio" || providerName === "ollama";
+      results.push({
+        category: "Legacy Overrides",
+        check: `Private network: ${providerName}`,
+        status: isLocalProvider ? "pass" : "info",
+        message: isLocalProvider
+          ? `${providerName} has allowPrivateNetwork — correct for local models`
+          : `${providerName} has allowPrivateNetwork enabled — ensure this is intentional for a trusted self-hosted endpoint`,
+      });
+    }
+  }
+
   // Check for stale model entries referencing old APIs
   for (const [providerName, provider] of Object.entries(providers)) {
     const models = provider.models as Array<Record<string, unknown>> | undefined;

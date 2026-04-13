@@ -1,5 +1,13 @@
+import { existsSync, readFileSync } from "fs";
+import { resolve, dirname } from "path";
 import type { AuditResult, OpenClawConfig } from "../types.js";
 import { loadAuthProfiles, expandPath } from "../utils/config.js";
+
+// Placeholder credentials shipped in .env.example that must be changed
+const PLACEHOLDER_PATTERNS = [
+  "change-me", "changeme", "your-token-here", "replace-me",
+  "your-password-here", "CHANGE_ME", "YOUR_TOKEN_HERE",
+];
 
 export function auditAuthProfiles(
   config: OpenClawConfig,
@@ -88,7 +96,7 @@ export function auditAuthProfiles(
   if (primary) {
     const provider = primary.split("/")[0];
     const hasAuth = entries.some(([, p]) => p.provider === provider);
-    if (!hasAuth && provider !== "ollama") {
+    if (!hasAuth && provider !== "ollama" && provider !== "lm-studio") {
       results.push({
         category: "Auth",
         check: `Auth for primary model (${provider})`,
@@ -96,6 +104,36 @@ export function auditAuthProfiles(
         message: `No auth profile for provider "${provider}" used by primary model`,
         fix: `Add auth: openclaw models auth login --provider ${provider}`,
       });
+    }
+  }
+
+  // Check for placeholder gateway credentials in .env (v2026.4.12+ fails on startup)
+  const configDir = dirname(expandPath(agentDir));
+  const envPaths = [
+    resolve(configDir, "..", ".env"),
+    resolve(configDir, "..", ".env.local"),
+  ];
+  for (const envPath of envPaths) {
+    if (existsSync(envPath)) {
+      try {
+        const envContent = readFileSync(envPath, "utf-8");
+        const lines = envContent.split("\n").filter((l) => !l.startsWith("#") && l.includes("="));
+        for (const line of lines) {
+          const [key, ...rest] = line.split("=");
+          const value = rest.join("=").trim().replace(/^["']|["']$/g, "");
+          if (PLACEHOLDER_PATTERNS.some((p) => value.toLowerCase().includes(p.toLowerCase()))) {
+            results.push({
+              category: "Auth",
+              check: `Placeholder credential: ${key.trim()}`,
+              status: "fail",
+              message: `${key.trim()} in ${envPath.split("/").pop()} still has placeholder value — gateway will refuse to start (v2026.4.12+)`,
+              fix: `Set a real value for ${key.trim()} in ${envPath.split("/").pop()}`,
+            });
+          }
+        }
+      } catch {
+        // .env file unreadable — skip
+      }
     }
   }
 

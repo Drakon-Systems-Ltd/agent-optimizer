@@ -98,6 +98,8 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
     "model", "models", "workspace", "contextTokens", "contextPruning",
     "compaction", "heartbeat", "maxConcurrent", "subagents", "thinkingDefault",
     "envelopeTimezone", "envelopeTimestamp", "memorySearch", "imageGenerationModel",
+    "imageMaxDimensionPx", "fastMode", "dreaming", "activeMemory", "execPolicy",
+    "dmScope", "memory",
   ];
   if (defaults) {
     const unknown = Object.keys(defaults).filter(

@@ -6,7 +6,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**55+ checks. 12 auditor modules. 82 tests.**
+**60+ checks. 12 auditor modules. 83 tests.**
 
 ## Install
 
@@ -99,15 +99,15 @@ The free audit is the full product — every check, every result, every fix inst
 
 | Auditor | Checks |
 |---------|--------|
-| **Model Config** | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault, unknown keys |
-| **Auth Profiles** | Token expiry, duplicate keys, provider coverage for primary model |
-| **Cost Estimator** | Monthly spend estimate, savings projection, expensive fallback warnings, subscription detection |
+| **Model Config** | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault, unknown keys (v2026.4.12 keys supported) |
+| **Auth Profiles** | Token expiry, duplicate keys, provider coverage, placeholder credential detection (.env) |
+| **Cost Estimator** | Monthly spend estimate, savings projection, expensive fallback warnings, subscription/self-hosted detection (LM Studio, Codex, Ollama) |
 | **Token Efficiency** | Context window sizing, heartbeat frequency, subagent concurrency, compaction, pruning |
 | **Cache Efficiency** | cacheRetention config, heartbeat vs cache TTL alignment, lightContext, compaction model cost |
 | **Bootstrap Files** | Per-file size vs 20K limit, total vs 150K budget, truncation warnings, missing SOUL/IDENTITY |
 | **Security Scanner** | 28 patterns: billing, injection, obfuscation, exfiltration. Per-skill scoring. Provenance detection |
-| **Plugins** | Stale installs, allowlist gaps, orphaned entries |
-| **Legacy Overrides** | Codex transport override, hardcoded API keys in models.json |
+| **Plugins** | Stale installs, allowlist gaps, orphaned entries, bundled plugin recognition (memory-wiki, dreaming, active-memory, etc.) |
+| **Legacy Overrides** | Codex transport override, hardcoded API keys in models.json, allowPrivateNetwork validation |
 | **Tool Permissions** | Allow/deny conflicts, elevated channel restrictions |
 | **Provider Failover** | Chain depth, provider diversity, auth coverage, cost escalation, latency risk |
 | **Channel Security** | DM/group policies, allowlist gaps, mutable ID warnings |
@@ -209,7 +209,7 @@ Channel Security
 npm install
 npx tsx src/cli.ts audit              # Run without building
 npm run build                          # Compile TypeScript
-npm test                               # Run tests (82 passing)
+npm test                               # Run tests (83 passing)
 ```
 
 ## License
