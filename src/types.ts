@@ -122,6 +122,8 @@ export interface OptimizeOptions {
   config: string;
   dryRun?: boolean;
   profile: "minimal" | "balanced" | "aggressive";
+  only?: string[];
+  skip?: string[];
 }
 
 export interface AuditOptions {

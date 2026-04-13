@@ -339,15 +339,25 @@ program
     "Optimization profile: minimal | balanced | aggressive",
     "balanced"
   )
+  .option(
+    "--only <tags>",
+    "Only apply these optimizations (comma-separated: context,heartbeat,subagents,compaction,pruning)"
+  )
+  .option(
+    "--skip <tags>",
+    "Skip these optimizations (comma-separated: context,heartbeat,subagents,compaction,pruning)"
+  )
   .action(async (opts) => {
     const licensed = hasValidLicense();
-
-    // If no license, always run as dry-run (free preview)
     const effectiveDryRun = opts.dryRun || !licensed;
+
+    // Parse comma-separated tags
+    const only = opts.only ? opts.only.split(",").map((t: string) => t.trim()) : undefined;
+    const skip = opts.skip ? opts.skip.split(",").map((t: string) => t.trim()) : undefined;
 
     console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
     const { runOptimize } = await import("./optimizers/index.js");
-    await runOptimize({ ...opts, dryRun: effectiveDryRun });
+    await runOptimize({ ...opts, dryRun: effectiveDryRun, only, skip });
 
     if (!licensed) {
       console.log(
