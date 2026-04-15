@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
-import { generateReport } from "./reporters/index.js";
+import { generateReport, printBanner } from "./reporters/index.js";
 import {
   loadLicense,
   saveLicense,
@@ -39,24 +39,26 @@ function hasValidLicense(): License | null {
 
 function printUpgradePrompt(feature: string): void {
   console.log(
-    chalk.yellow(`\n🔒 ${feature} requires a license.\n`)
+    chalk.red(`\n  ░░ ${feature} requires a license.\n`)
   );
-  console.log(
-    "Purchase at: " +
-      chalk.bold("https://drakonsystems.com/products/agent-optimizer/buy")
-  );
-  console.log(
-    "Then activate: " +
-      chalk.dim("agent-optimizer activate <key>") +
-      "\n"
-  );
-  console.log(chalk.dim("Pricing:"));
+  console.log(chalk.dim("  ┌─────────────────────────────────────────────┐"));
   for (const tier of PRICING) {
+    const price = `£${(tier.price / 100).toFixed(0)}`;
     console.log(
-      `  ${tier.name.padEnd(20)} £${(tier.price / 100).toFixed(0).padStart(3)}  ${tier.description}`
+      chalk.dim("  │ ") +
+      chalk.bold.white(tier.name.padEnd(12)) +
+      chalk.red(price.padStart(5)) +
+      chalk.dim("  " + tier.description.padEnd(26)) +
+      chalk.dim("│")
     );
   }
-  console.log();
+  console.log(chalk.dim("  └─────────────────────────────────────────────┘"));
+  console.log(
+    chalk.dim("\n  → ") + chalk.white("https://drakonsystems.com/products/agent-optimizer/buy")
+  );
+  console.log(
+    chalk.dim("  → ") + chalk.dim("agent-optimizer activate <key>\n")
+  );
 }
 
 function requireLicense(command: string): License {
@@ -91,7 +93,8 @@ program
   .description("Activate a license key")
   .option("--email <email>", "Email used for purchase")
   .action(async (key: string, opts: { email?: string }) => {
-    console.log(chalk.bold("\n🔑 Drakon Systems — License Activation\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("license activation\n"));
 
     if (!/^AO-[A-Z]{3,4}-[A-F0-9]{8}-[A-F0-9]{8}$/.test(key)) {
       console.log(chalk.red("Invalid key format."));
@@ -141,30 +144,29 @@ program
   .command("license")
   .description("Show current license status")
   .action(() => {
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("license status\n"));
+
     const license = loadLicense();
     if (!license) {
-      console.log(chalk.yellow("\nNo license installed.\n"));
-      console.log("Free: " + chalk.white("agent-optimizer audit") + " and " + chalk.white("agent-optimizer scan"));
-      console.log("Paid: " + chalk.dim("optimize --fix, fleet"));
-      console.log("\nPurchase: https://drakonsystems.com/products/agent-optimizer/buy");
-      console.log("Activate: agent-optimizer activate <key>\n");
+      console.log(chalk.red("  ░░") + " No license installed\n");
+      console.log(chalk.dim("  Free commands work without a license:"));
+      console.log(`  ${chalk.red("→")} ${chalk.white("agent-optimizer audit")}`);
+      console.log(`  ${chalk.red("→")} ${chalk.white("agent-optimizer scan")}`);
+      console.log(`  ${chalk.red("→")} ${chalk.white("agent-optimizer optimize --dry-run")}\n`);
+      console.log(chalk.dim("  → ") + chalk.white("https://drakonsystems.com/products/agent-optimizer/buy\n"));
       return;
     }
 
     const check = validateLicense(license);
-    console.log(chalk.bold("\n🔑 License Status\n"));
-    console.log(`  Key:     ${license.key}`);
-    console.log(`  Tier:    ${license.data.tier}`);
-    console.log(`  Email:   ${license.data.email}`);
-    console.log(`  Issued:  ${license.data.issuedAt}`);
-    console.log(
-      `  Expires: ${license.data.expiresAt ?? "Never (lifetime)"}`
-    );
-    console.log(
-      `  Status:  ${check.valid ? chalk.green("Valid") : chalk.red(check.reason!)}`
-    );
-    console.log(`  Fleet:   ${canUseFleet(license.data.tier) ? "Yes" : "No (upgrade to Fleet or Lifetime)"}`);
-    console.log(chalk.dim(`\n  File: ${getLicensePath()}\n`));
+    console.log(chalk.dim("  ┌─────────────────────────────────────────────┐"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Key     ") + chalk.white(license.key.padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Tier    ") + chalk.bold.white(license.data.tier.padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Email   ") + chalk.white(license.data.email.padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Expires ") + chalk.white((license.data.expiresAt ?? "Never (lifetime)").padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Status  ") + (check.valid ? chalk.green("Valid".padEnd(37)) : chalk.red((check.reason ?? "Invalid").padEnd(37))) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Fleet   ") + (canUseFleet(license.data.tier) ? chalk.green("Yes".padEnd(37)) : chalk.dim("No (upgrade to Fleet)".padEnd(37))) + chalk.dim("│"));
+    console.log(chalk.dim("  └─────────────────────────────────────────────┘\n"));
   });
 
 program
@@ -182,7 +184,8 @@ program
   .command("update")
   .description("Check for updates and install the latest version")
   .action(async () => {
-    console.log(chalk.bold("\n🦞 Agent Optimizer — Update\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("update\n"));
     console.log(`  Current: v${version}\n`);
     console.log("  Checking for updates...");
 
@@ -230,7 +233,7 @@ program
       const license = hasValidLicense();
       if (!license) {
         // Run audit first to show them what they're missing, THEN gate the fix
-        console.log(chalk.bold("\n🔍 Drakon Systems — Agent Optimizer\n"));
+        printBanner();
         const results = await runFullAudit(opts);
         generateReport(results, { ...opts, fix: false });
 
@@ -251,7 +254,7 @@ program
       }
     }
 
-    console.log(chalk.bold("\n🔍 Drakon Systems — Agent Optimizer\n"));
+    printBanner();
     const results = await runFullAudit(opts);
     generateReport(results, opts);
 
@@ -261,25 +264,16 @@ program
       const fails = results.summary.fail;
       if (warns > 0 || fails > 0) {
         console.log(
-          chalk.dim(
-            "─────────────────────────────────────────────────────"
-          )
+          chalk.dim("  ┌─────────────────────────────────────────────┐")
         );
         console.log(
-          chalk.yellow(
-            `\n🦞 Found ${fails} critical and ${warns} warnings. Want to fix them automatically?`
-          )
+          chalk.dim("  │ ") + chalk.red("→ ") + chalk.white("agent-optimizer optimize") + chalk.dim("       preview fixes │")
         );
         console.log(
-          `   Run: ${chalk.white("agent-optimizer optimize")} to preview recommended changes (free)`
+          chalk.dim("  │ ") + chalk.red("→ ") + chalk.white("agent-optimizer audit --fix") + chalk.dim("    auto-apply  │")
         );
         console.log(
-          `   Run: ${chalk.white("agent-optimizer audit --fix")} to auto-apply fixes (requires license)\n`
-        );
-        console.log(
-          chalk.dim(
-            "   License: https://drakonsystems.com/products/agent-optimizer/buy\n"
-          )
+          chalk.dim("  └─────────────────────────────────────────────┘\n")
         );
       }
     }
@@ -297,7 +291,8 @@ program
   )
   .option("--workspace <path>", "Path to workspace directory")
   .action(async (opts) => {
-    console.log(chalk.bold("\n🛡️  Drakon Systems — Security Scanner\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("security scan\n"));
     const { runSecurityScan } = await import("./auditors/security-scan.js");
     const results = await runSecurityScan(opts);
 
@@ -355,7 +350,8 @@ program
     const only = opts.only ? opts.only.split(",").map((t: string) => t.trim()) : undefined;
     const skip = opts.skip ? opts.skip.split(",").map((t: string) => t.trim()) : undefined;
 
-    console.log(chalk.bold("\n⚡ Drakon Systems — Agent Optimizer\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("optimize") + chalk.dim(` · ${effectiveDryRun ? "dry-run" : "apply"} · ${opts.profile}\n`));
     const { runOptimize } = await import("./optimizers/index.js");
     await runOptimize({ ...opts, dryRun: effectiveDryRun, only, skip });
 
@@ -391,7 +387,8 @@ program
     const configPath = expandPath(opts.config);
     const backupPath = `${configPath}.pre-optimize.bak`;
 
-    console.log(chalk.bold("\n🔄 Drakon Systems — Rollback\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("rollback\n"));
 
     if (!existsSync(backupPath)) {
       console.log(chalk.yellow("  No backup found."));
@@ -448,7 +445,8 @@ snapshot
   )
   .option("--name <name>", "Snapshot name", "golden")
   .action(async (opts) => {
-    console.log(chalk.bold("\n📸 Drakon Systems — Config Snapshot\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("snapshot save\n"));
     const { saveSnapshot } = await import("./auditors/config-drift.js");
     saveSnapshot(opts.config, opts.name);
   });
@@ -471,7 +469,8 @@ program
   )
   .option("--name <name>", "Snapshot name to compare against", "golden")
   .action(async (opts) => {
-    console.log(chalk.bold("\n🔍 Drakon Systems — Config Drift Detection\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
     const { detectDrift } = await import("./auditors/config-drift.js");
     const results = detectDrift(opts.config, opts.name);
     generateReport(
@@ -499,7 +498,8 @@ program
   .option("--json", "Output results as JSON")
   .action(async (opts) => {
     requireLicense("fleet");
-    console.log(chalk.bold("\n🚀 Drakon Systems — Fleet Audit\n"));
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("fleet audit\n"));
     const { runFleetAudit } = await import("./auditors/fleet.js");
     await runFleetAudit(opts);
   });
