@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-83%20passing-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-130%20passing-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**60+ checks. 12 auditor modules. 83 tests.**
+**70+ checks. 15 auditor modules. 130 tests.**
 
 ## Install
 
@@ -47,7 +47,7 @@ agent-optimizer drift --name golden
 ### Free Commands (no license needed)
 
 ```bash
-agent-optimizer audit                              # Full 55+ check audit
+agent-optimizer audit                              # Full 70+ check audit
 agent-optimizer audit --json                       # Machine-readable output
 agent-optimizer audit --deep                       # Include live gateway probes
 agent-optimizer scan                               # Security scan skills/plugins/hooks
@@ -86,7 +86,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` (55+ checks) | Full results | Full results | Full results | Full results |
+| `audit` (70+ checks) | Full results | Full results | Full results | Full results |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
 | `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
@@ -104,9 +104,9 @@ The free audit is the full product — every check, every result, every fix inst
 
 | Auditor | Checks |
 |---------|--------|
-| **Model Config** | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault, unknown keys (v2026.4.12 keys supported) |
+| **Model Config** | Primary model, fallback diversity, cross-provider redundancy, thinkingDefault, legacy alias detection, thinking mode compatibility, unknown keys |
 | **Auth Profiles** | Token expiry, duplicate keys, provider coverage, placeholder credential detection (.env) |
-| **Cost Estimator** | Monthly spend estimate, savings projection, expensive fallback warnings, subscription/self-hosted detection (LM Studio, Codex, Ollama) |
+| **Cost Estimator** | Monthly spend estimate, savings projection, expensive fallback warnings, subscription/self-hosted detection (LM Studio, Codex, Ollama, GitHub Copilot) |
 | **Token Efficiency** | Context window sizing, heartbeat frequency, subagent concurrency, compaction, pruning |
 | **Cache Efficiency** | cacheRetention config, heartbeat vs cache TTL alignment, lightContext, compaction model cost |
 | **Bootstrap Files** | Per-file size vs 20K limit, total vs 150K budget, truncation warnings, missing SOUL/IDENTITY |
@@ -116,6 +116,9 @@ The free audit is the full product — every check, every result, every fix inst
 | **Tool Permissions** | Allow/deny conflicts, elevated channel restrictions |
 | **Provider Failover** | Chain depth, provider diversity, auth coverage, cost escalation, latency risk |
 | **Channel Security** | DM/group policies, allowlist gaps, mutable ID warnings |
+| **Memory Search** | Embedding provider, hybrid search weights, embedding cache, sqlite-vec acceleration, dreaming, active memory, QMD backend |
+| **Local Models** | localModelLean recommendation, context window vs model capacity, compaction reserve overflow, subagent/heartbeat limits, fallback resilience |
+| **Security Advisories** | Version-aware checks against 14 known issues from v2026.4.12–4.15 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks) |
 
 ## Optimize Profiles
 
@@ -153,6 +156,23 @@ agent-optimizer drift --name golden
 ```
 
 Tracks 15+ config fields including model, fallbacks, context, heartbeat, compaction, plugins, and tool permissions. Flags critical changes to model selection and plugin allowlists.
+
+## Security Advisories
+
+Agent Optimizer auto-detects your OpenClaw version and checks against known security issues:
+
+```
+Security
+  ✓ OpenClaw version: Detected OpenClaw 2026.4.12
+  ✗ config.patch gateway bypass: config.patch callable from gateway tool — allows remote config modification
+  ✗ Approval prompt secret leak: Secrets visible in exec approval prompts
+  ✗ Workspace symlink traversal: agents.files.get/set don't prevent symlink-swap attacks
+  ⚠ Bearer timing attack: Gateway /mcp bearer uses plain !== comparison
+  ⚠ Memory path traversal: QMD backend allows reads of arbitrary workspace paths
+  ✗ Advisory summary: 12 advisories (3 critical, 9 warnings) — upgrade to v2026.4.15+
+```
+
+Covers 14 known issues across v2026.4.12 through v2026.4.15.
 
 ## Licensing
 
@@ -197,11 +217,20 @@ Bootstrap Files
   ✓ TOOLS.md: 0.9K chars (4% of limit)
   ✓ Total: 13.2K chars (9% of 150K budget)
 
+Memory Search
+  ✓ Embedding provider: openai
+  ✓ Hybrid weights: 0.7 vector / 0.3 text
+  ✓ Dreaming enabled (schedule: 0 3 * * *)
+
+Security
+  ✓ OpenClaw version: Detected OpenClaw 2026.4.15
+  ✓ No known security advisories for this version
+
 Channel Security
   ⚠ No default DM policy set
 
 ─── Summary ───
-  23 pass  8 warn  1 fail  Total: 46
+  28 pass  8 warn  1 fail  Total: 52
 
 🦞 Found 1 critical and 8 warnings. Want to fix them automatically?
    Run: agent-optimizer optimize to preview changes (free)
@@ -214,7 +243,7 @@ Channel Security
 npm install
 npx tsx src/cli.ts audit              # Run without building
 npm run build                          # Compile TypeScript
-npm test                               # Run tests (83 passing)
+npm test                               # Run tests (130 passing)
 ```
 
 ## License
