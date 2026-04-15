@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-130%20passing-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-130-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -59,6 +59,8 @@ agent-optimizer snapshot save --name golden        # Save config baseline
 agent-optimizer snapshot list                      # List saved snapshots
 agent-optimizer license                            # Show license status
 agent-optimizer update                             # Check for updates
+agent-optimizer buy                                # Open purchase page in browser
+agent-optimizer buy --tier solo                    # Pre-select Solo tier
 ```
 
 ### Licensed Commands (Solo £29+)
@@ -86,7 +88,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` (70+ checks) | Full results | Full results | Full results | Full results |
+| `audit` (70+ checks) | Results + 3 fixes | All fixes | All fixes | All fixes |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
 | `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
@@ -98,7 +100,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
-The free audit is the full product — every check, every result, every fix instruction. You only pay when you want the tool to apply fixes automatically.
+The free audit shows every issue and the first 3 fix instructions. A license unlocks all fix instructions, auto-fix, and optimization profiles.
 
 ## What It Audits
 

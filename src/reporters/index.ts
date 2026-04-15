@@ -13,7 +13,6 @@ const yellow = chalk.yellow;
 const blue = chalk.blue;
 const dim = chalk.dim;
 const white = chalk.bold.white;
-const grey = chalk.grey;
 
 // Status blocks — visual weight instead of tiny icons
 const STATUS_BLOCK: Record<string, string> = {
@@ -23,18 +22,13 @@ const STATUS_BLOCK: Record<string, string> = {
   info: blue("▪▪"),
 };
 
-const STATUS_DOT: Record<string, string> = {
-  pass: green("●"),
-  warn: yellow("●"),
-  fail: red("●"),
-  info: blue("●"),
-};
+// How many fix instructions to show for free
+const FREE_FIX_LIMIT = 3;
 
 // ── Health score ────────────────────────────────────────────────────
 function calculateHealthScore(report: AuditReport): number {
   const { pass, warn, fail, total } = report.summary;
   if (total === 0) return 100;
-  // pass = full points, info = full, warn = 0.4, fail = 0
   const info = total - pass - warn - fail;
   const score = ((pass + info) * 1.0 + warn * 0.4 + fail * 0) / total;
   return Math.round(score * 100);
@@ -59,15 +53,30 @@ function printBanner(): void {
   console.log(dim("  ─────────────────────────────"));
 }
 
+// ── ROI calculation ─────────────────────────────────────────────────
+function extractMonthlySavings(report: AuditReport): number | null {
+  // Look for the savings result from cost estimator
+  const savingsResult = report.results.find(
+    (r) => r.category === "Cost Estimate" && r.check.includes("savings")
+  );
+  if (!savingsResult) return null;
+
+  // Extract £ amount from message like "Save ~£47/month"
+  const match = savingsResult.message.match(/£(\d+)/);
+  return match ? parseInt(match[1]) : null;
+}
+
 // ── Main report ─────────────────────────────────────────────────────
 export function generateReport(
   report: AuditReport,
-  opts: { json?: boolean }
+  opts: { json?: boolean; licensed?: boolean }
 ): void {
   if (opts.json) {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
+
+  const licensed = opts.licensed ?? false;
 
   // Group by category
   const categories = new Map<string, AuditResult[]>();
@@ -78,20 +87,30 @@ export function generateReport(
     categories.get(result.category)!.push(result);
   }
 
+  // Track fix display for gating
+  let fixesShown = 0;
+  let fixesGated = 0;
+
   // Print each category
   for (const [category, results] of categories) {
-    // Category header with line
     const label = `  ${redBold("▸")} ${white(category)} `;
     const lineLen = Math.max(0, 48 - category.length);
     console.log(`\n${label}${dim("─".repeat(lineLen))}`);
 
     for (const r of results) {
       const block = STATUS_BLOCK[r.status] ?? "??";
-      // Truncate long messages for compact display
       const msg = r.message.length > 80 ? r.message.slice(0, 78) + "…" : r.message;
       console.log(`  ${block} ${dim(r.check + ":")} ${statusColour(r.status, msg)}`);
+
+      // Fix instruction gating
       if (r.fix && (r.status === "fail" || r.status === "warn")) {
-        console.log(`     ${red("→")} ${dim(r.fix)}`);
+        if (licensed || fixesShown < FREE_FIX_LIMIT) {
+          console.log(`     ${red("→")} ${dim(r.fix)}`);
+          fixesShown++;
+        } else {
+          console.log(`     ${red("→")} ${dim("██████████████████████████████")}`);
+          fixesGated++;
+        }
       }
     }
   }
@@ -129,6 +148,28 @@ export function generateReport(
   } else {
     console.log(green(`\n  ✓ All checks passed — clean config`));
   }
+
+  // ── ROI upsell for unlicensed users ──────────────────────────────
+  if (!licensed && fixesGated > 0) {
+    const monthly = extractMonthlySavings(report);
+    const annual = monthly ? monthly * 12 : null;
+
+    console.log();
+    console.log(dim("  ┌─────────────────────────────────────────────┐"));
+
+    if (annual && annual > 29) {
+      const payback = Math.ceil(29 / monthly!);
+      console.log(dim("  │ ") + red(`£${annual}/year`) + dim(" in token waste identified") + dim("           │"));
+      console.log(dim("  │ ") + white(`£29 license pays for itself in ${payback} day${payback > 1 ? "s" : ""}`) + dim("        │"));
+    }
+
+    console.log(dim("  │ ") + yellow(`${fixesGated} fix instruction${fixesGated > 1 ? "s" : ""} hidden`) + dim(" — unlock with a license") + dim("   │"));
+    console.log(dim("  │                                             │"));
+    console.log(dim("  │ ") + red("→ ") + white("agent-optimizer buy") + dim("        open purchase page │"));
+    console.log(dim("  │ ") + red("→ ") + white("agent-optimizer activate <key>") + dim(" activate      │"));
+    console.log(dim("  └─────────────────────────────────────────────┘"));
+  }
+
   console.log();
 }
 
@@ -149,7 +190,7 @@ function scoreColour(score: number): (s: string) => string {
   return red;
 }
 
-// ── Scan reporter (for security-scan.ts) ────────────────────────────
+// ── Scan reporter ───────────────────────────────────────────────────
 export function printScanResults(results: AuditResult[]): void {
   if (results.length === 0) {
     console.log(green("  ██ No suspicious patterns found\n"));
@@ -175,5 +216,4 @@ export function printScanResults(results: AuditResult[]): void {
   console.log();
 }
 
-// ── Progress helpers for audit pipeline ─────────────────────────────
 export { printBanner };

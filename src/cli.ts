@@ -53,6 +53,7 @@ program
       `    ${w("fleet")} ${d("--hosts a,b,c [--json]")}             ${d("SSH fleet audit")}`,
       "",
       d("  UTILITY"),
+      `    ${w("buy")} ${d("[--tier solo|fleet]")}                    ${d("Open purchase page")}`,
       `    ${w("activate")} ${d("<key>")}       ${w("license")}          ${w("update")}`,
       `    ${w("deactivate")}          ${w("snapshot list")}     ${w("drift")}`,
       "",
@@ -254,6 +255,26 @@ program
     }
   });
 
+program
+  .command("buy")
+  .description("Open the purchase page in your browser")
+  .option("--tier <tier>", "Pre-select tier: solo | fleet | lifetime", "fleet")
+  .action(async (opts) => {
+    const url = `https://drakonsystems.com/products/agent-optimizer/buy?tier=${opts.tier}`;
+    printBanner();
+    console.log(chalk.dim("  Opening: ") + chalk.white(url) + "\n");
+
+    // Cross-platform browser open
+    const { exec } = await import("child_process");
+    const platform = process.platform;
+    const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+    exec(`${cmd} "${url}"`, (err) => {
+      if (err) {
+        console.log(chalk.dim("  Could not open browser. Visit the URL above manually.\n"));
+      }
+    });
+  });
+
 // --- Free commands (audit + scan show results, fixes are gated) ---
 
 program
@@ -269,54 +290,20 @@ program
   .option("--fix", "Apply safe fixes automatically (requires license)")
   .option("--deep", "Include live gateway probes")
   .action(async (opts) => {
-    if (opts.fix) {
-      const license = hasValidLicense();
-      if (!license) {
-        // Run audit first to show them what they're missing, THEN gate the fix
-        printBanner();
-        const results = await runFullAudit(opts);
-        generateReport(results, { ...opts, fix: false });
+    const licensed = !!hasValidLicense();
 
-        const fixable = results.results.filter((r) => r.autoFixable);
-        if (fixable.length > 0) {
-          console.log(
-            chalk.yellow(
-              `\n🔒 ${fixable.length} issue(s) can be auto-fixed — but --fix requires a license.\n`
-            )
-          );
-        } else {
-          console.log(
-            chalk.yellow("\n🔒 --fix requires a license to apply changes.\n")
-          );
-        }
-        printUpgradePrompt("Auto-fix");
-        process.exit(1);
-      }
+    if (opts.fix && !licensed) {
+      printBanner();
+      const results = await runFullAudit(opts);
+      generateReport(results, { ...opts, licensed: false });
+      console.log(chalk.red(`  ░░ --fix requires a license to apply changes.\n`));
+      printUpgradePrompt("Auto-fix");
+      process.exit(1);
     }
 
     printBanner();
     const results = await runFullAudit(opts);
-    generateReport(results, opts);
-
-    // If no license, show the upsell after results
-    if (!hasValidLicense()) {
-      const warns = results.summary.warn;
-      const fails = results.summary.fail;
-      if (warns > 0 || fails > 0) {
-        console.log(
-          chalk.dim("  ┌─────────────────────────────────────────────┐")
-        );
-        console.log(
-          chalk.dim("  │ ") + chalk.red("→ ") + chalk.white("agent-optimizer optimize") + chalk.dim("       preview fixes │")
-        );
-        console.log(
-          chalk.dim("  │ ") + chalk.red("→ ") + chalk.white("agent-optimizer audit --fix") + chalk.dim("    auto-apply  │")
-        );
-        console.log(
-          chalk.dim("  └─────────────────────────────────────────────┘\n")
-        );
-      }
-    }
+    generateReport(results, { ...opts, licensed });
   });
 
 program
