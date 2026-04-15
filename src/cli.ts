@@ -26,7 +26,47 @@ program
   .description(
     "OpenClaw Agent Optimizer by Drakon Systems — audit, optimize, and secure your OpenClaw deployment"
   )
-  .version(version);
+  .version(version)
+  .addHelpText("before", () => {
+    const r = chalk.red;
+    const w = chalk.bold.white;
+    const d = chalk.dim;
+
+    return [
+      "",
+      r("  🦞 ") + w("AGENT OPTIMIZER") + d(` v${version}`),
+      d("  ─────────────────────────────"),
+      "",
+      d("  FREE"),
+      `    ${w("audit")}  ${d("[-c config] [--json] [--deep]")}     ${d("Full 70+ check audit")}`,
+      `    ${w("scan")}   ${d("[-c config] [--workspace path]")}    ${d("Malware + billing scan")}`,
+      `    ${w("optimize --dry-run")} ${d("[--profile name]")}      ${d("Preview optimizations")}`,
+      `    ${w("drift")}  ${d("[--name snapshot]")}                 ${d("Config drift detection")}`,
+      `    ${w("snapshot save")} ${d("[--name golden]")}            ${d("Save config baseline")}`,
+      "",
+      d("  LICENSED") + d(" (Solo £29+)"),
+      `    ${w("audit --fix")}                              ${d("Auto-apply safe fixes")}`,
+      `    ${w("optimize")} ${d("[--profile] [--only] [--skip]")}   ${d("Apply optimizations")}`,
+      `    ${w("rollback")}                                 ${d("Restore pre-optimize backup")}`,
+      "",
+      d("  FLEET") + d(" (£79+)"),
+      `    ${w("fleet")} ${d("--hosts a,b,c [--json]")}             ${d("SSH fleet audit")}`,
+      "",
+      d("  UTILITY"),
+      `    ${w("activate")} ${d("<key>")}       ${w("license")}          ${w("update")}`,
+      `    ${w("deactivate")}          ${w("snapshot list")}     ${w("drift")}`,
+      "",
+      d("  Use") + ` ${w("agent-optimizer <command> --help")} ` + d("for full options"),
+      "",
+    ].join("\n");
+  })
+  .helpOption("-h, --help", "Display this help screen");
+
+// Suppress default help text for the root program only (subcommands keep theirs)
+const originalHelpInfo = program.helpInformation.bind(program);
+program.helpInformation = function () {
+  return ""; // our beforeAll text replaces this
+};
 
 // --- License helpers ---
 
