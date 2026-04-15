@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
-import { generateReport, printBanner } from "./reporters/index.js";
+import { generateReport, printBanner, printScanResults } from "./reporters/index.js";
 import {
   loadLicense,
   saveLicense,
@@ -296,24 +296,16 @@ program
     const { runSecurityScan } = await import("./auditors/security-scan.js");
     const results = await runSecurityScan(opts);
 
+    printScanResults(results);
+
     if (!hasValidLicense() && results.length > 0) {
       const suspicious = results.filter((r) => r.status === "warn" || r.status === "fail");
       if (suspicious.length > 0) {
-        console.log(
-          chalk.dim(
-            "\n─────────────────────────────────────────────────────"
-          )
-        );
-        console.log(
-          chalk.yellow(
-            `\n🦞 Found ${suspicious.length} suspicious pattern(s). Full fleet scanning available with a license.`
-          )
-        );
-        console.log(
-          chalk.dim(
-            "   https://drakonsystems.com/products/agent-optimizer/buy\n"
-          )
-        );
+        console.log(chalk.dim("  ┌─────────────────────────────────────────────┐"));
+        console.log(chalk.dim("  │ ") + chalk.red(`${suspicious.length} suspicious pattern(s) found`) + chalk.dim("               │"));
+        console.log(chalk.dim("  │ ") + chalk.dim("Fleet scanning: drakonsystems.com/products/") + chalk.dim("  │"));
+        console.log(chalk.dim("  │ ") + chalk.dim("agent-optimizer/buy") + chalk.dim("                        │"));
+        console.log(chalk.dim("  └─────────────────────────────────────────────┘\n"));
       }
     }
   });
