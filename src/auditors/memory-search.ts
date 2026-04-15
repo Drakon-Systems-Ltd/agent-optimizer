@@ -1,3 +1,6 @@
+import { existsSync } from "fs";
+import { resolve } from "path";
+import { expandPath } from "../utils/config.js";
 import type { AuditResult, OpenClawConfig } from "../types.js";
 
 // Embedding providers that need explicit API keys or auth
@@ -16,6 +19,77 @@ const LOCAL_PROVIDERS = ["local", "ollama"];
 const DEFAULT_VECTOR_WEIGHT = 0.7;
 const DEFAULT_TEXT_WEIGHT = 0.3;
 
+/**
+ * Detect ShieldCortex as a memory provider via hooks, plugins, or load paths.
+ * Returns a description string if found, null otherwise.
+ */
+function detectShieldCortex(config: OpenClawConfig): string | null {
+  // Check for cortex-memory hook
+  const hookPath = expandPath("~/.openclaw/hooks/cortex-memory");
+  if (existsSync(hookPath)) return "cortex-memory hook";
+
+  // Check for shieldcortex-realtime plugin
+  const entries = config.plugins?.entries ?? {};
+  if (entries["shieldcortex-realtime"]?.enabled !== false) {
+    if ("shieldcortex-realtime" in entries) return "shieldcortex-realtime plugin";
+  }
+
+  // Check plugin installs
+  const installs = config.plugins?.installs ?? {};
+  if ("shieldcortex-realtime" in installs) return "shieldcortex-realtime plugin";
+
+  // Check plugin load paths
+  const loadPaths = (config.plugins as Record<string, unknown> | undefined)?.load as
+    { paths?: string[] } | undefined;
+  if (loadPaths?.paths) {
+    for (const p of loadPaths.paths) {
+      if (p.toLowerCase().includes("shieldcortex")) return `plugin path: ${p.split("/").pop()}`;
+    }
+  }
+
+  // Check plugins.allow
+  const allow = config.plugins?.allow ?? [];
+  if (allow.some((a) => a.toLowerCase().includes("shieldcortex"))) return "plugins.allow";
+
+  return null;
+}
+
+/**
+ * Check dreaming and active-memory plugin status (shared between config/no-config paths).
+ */
+function checkPluginMemory(config: OpenClawConfig, results: AuditResult[]): void {
+  const memoryCore = config.plugins?.entries?.["memory-core"];
+  const dreamingConfig = (memoryCore?.config as Record<string, unknown> | undefined)?.dreaming as
+    Record<string, unknown> | undefined;
+
+  if (dreamingConfig?.enabled === true) {
+    const freq = dreamingConfig.frequency as string | undefined;
+    results.push({
+      category: "Memory Search",
+      check: "Dreaming",
+      status: "pass",
+      message: `Dreaming enabled${freq ? ` (schedule: ${freq})` : ""} — writes to memory/.dreams/`,
+    });
+  }
+
+  const activeMemory = config.plugins?.entries?.["active-memory"];
+  if (activeMemory?.enabled === true) {
+    results.push({
+      category: "Memory Search",
+      check: "Active Memory plugin",
+      status: "pass",
+      message: "Active Memory sub-agent enabled — recalls context before each reply",
+    });
+  } else if (activeMemory?.enabled === false) {
+    results.push({
+      category: "Memory Search",
+      check: "Active Memory plugin",
+      status: "info",
+      message: "Active Memory plugin present but disabled",
+    });
+  }
+}
+
 export function auditMemorySearch(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];
   const defaults = config.agents?.defaults;
@@ -25,12 +99,25 @@ export function auditMemorySearch(config: OpenClawConfig): AuditResult[] {
   // --- Memory search enabled check ---
 
   if (!memorySearch) {
-    results.push({
-      category: "Memory Search",
-      check: "Memory search configured",
-      status: "info",
-      message: "No memorySearch config — OpenClaw auto-detects an embedding provider at startup",
-    });
+    // Check for ShieldCortex providing memory before saying "no config"
+    const shieldcortex = detectShieldCortex(config);
+    if (shieldcortex) {
+      results.push({
+        category: "Memory Search",
+        check: "Memory provider",
+        status: "pass",
+        message: `ShieldCortex detected (${shieldcortex}) — provides persistent memory, semantic search, and recall`,
+      });
+    } else {
+      results.push({
+        category: "Memory Search",
+        check: "Memory search configured",
+        status: "info",
+        message: "No memorySearch config — OpenClaw auto-detects an embedding provider at startup",
+      });
+    }
+    // Still check dreaming/active-memory even without memorySearch config
+    checkPluginMemory(config, results);
     return results;
   }
 
@@ -192,38 +279,19 @@ export function auditMemorySearch(config: OpenClawConfig): AuditResult[] {
     });
   }
 
-  // --- Dreaming config ---
+  // --- Dreaming + Active Memory ---
 
-  const memoryCore = config.plugins?.entries?.["memory-core"];
-  const dreamingConfig = (memoryCore?.config as Record<string, unknown> | undefined)?.dreaming as
-    Record<string, unknown> | undefined;
+  checkPluginMemory(config, results);
 
-  if (dreamingConfig?.enabled === true) {
-    const freq = dreamingConfig.frequency as string | undefined;
+  // --- ShieldCortex detection (even with explicit memorySearch config) ---
+
+  const shieldcortex = detectShieldCortex(config);
+  if (shieldcortex) {
     results.push({
       category: "Memory Search",
-      check: "Dreaming",
+      check: "ShieldCortex",
       status: "pass",
-      message: `Dreaming enabled${freq ? ` (schedule: ${freq})` : ""} — writes to memory/.dreams/`,
-    });
-  }
-
-  // --- Active Memory plugin ---
-
-  const activeMemory = config.plugins?.entries?.["active-memory"];
-  if (activeMemory?.enabled === true) {
-    results.push({
-      category: "Memory Search",
-      check: "Active Memory plugin",
-      status: "pass",
-      message: "Active Memory sub-agent enabled — recalls context before each reply",
-    });
-  } else if (activeMemory?.enabled === false) {
-    results.push({
-      category: "Memory Search",
-      check: "Active Memory plugin",
-      status: "info",
-      message: "Active Memory plugin present but disabled",
+      message: `ShieldCortex detected (${shieldcortex}) — persistent memory + semantic search`,
     });
   }
 

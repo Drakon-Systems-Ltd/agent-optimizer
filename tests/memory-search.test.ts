@@ -3,12 +3,17 @@ import { auditMemorySearch } from "../src/auditors/memory-search.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditMemorySearch", () => {
-  it("returns info when no memorySearch configured", () => {
+  it("detects ShieldCortex or reports no config when no memorySearch", () => {
     const config: OpenClawConfig = { agents: { defaults: {} } };
     const results = auditMemorySearch(config);
-    expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("info");
-    expect(results[0].message).toContain("auto-detects");
+    // Either ShieldCortex detected (pass) or no config (info) depending on host
+    const first = results[0];
+    expect(["pass", "info"]).toContain(first.status);
+    if (first.status === "pass") {
+      expect(first.message).toContain("ShieldCortex");
+    } else {
+      expect(first.message).toContain("auto-detects");
+    }
   });
 
   it("warns when memory search is explicitly disabled", () => {

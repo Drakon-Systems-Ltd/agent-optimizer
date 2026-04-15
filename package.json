@@ -1,7 +1,7 @@
 {
   "name": "@drakon-systems/agent-optimizer",
-  "version": "0.8.0",
-  "description": "OpenClaw Agent Optimizer — audit, optimize, and secure OpenClaw deployments",
+  "version": "0.8.1",
+  "description": "Audit, optimize, and secure OpenClaw AI agent deployments. Token waste detection, security scanning, config drift, fleet SSH audit. Free to install.",
   "type": "module",
   "bin": {
     "agent-optimizer": "dist/cli.js"
@@ -19,10 +19,22 @@
   },
   "keywords": [
     "openclaw",
-    "agent",
-    "optimizer",
-    "audit",
-    "security"
+    "openclaw-audit",
+    "openclaw-security",
+    "openclaw-optimize",
+    "openclaw-config",
+    "openclaw-scanner",
+    "agent-optimizer",
+    "ai-agent",
+    "ai-security",
+    "token-optimization",
+    "config-audit",
+    "fleet-management",
+    "security-scanner",
+    "malware-detection",
+    "cost-optimization",
+    "clawhub",
+    "drakon-systems"
   ],
   "author": "Drakon Systems Ltd <support@drakonsystems.com>",
   "license": "SEE LICENSE IN LICENSE.md",

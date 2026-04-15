@@ -157,18 +157,33 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
     }
 
     // Check for expired OAuth tokens
+    // If at least one profile for this provider is valid, expired ones are just stale (info, not fail)
+    const hasValidProfile = providerProfiles.some(
+      ([, p]) => !p.expires || p.expires > now
+    );
+
     for (const [name, profile] of providerProfiles) {
       if (profile.expires) {
         const remaining = profile.expires - now;
         if (remaining < 0) {
           const isPrimary = model === primary;
-          results.push({
-            category: "Provider Failover",
-            check: `Auth: ${name}`,
-            status: isPrimary ? "fail" : "warn",
-            message: `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago${isPrimary ? " — PRIMARY MODEL" : ""}`,
-            fix: `Re-authenticate: openclaw models auth login --provider ${provider}`,
-          });
+          if (hasValidProfile) {
+            // Another profile works — this is just a stale entry
+            results.push({
+              category: "Provider Failover",
+              check: `Auth: ${name}`,
+              status: "info",
+              message: `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago (another ${provider} profile is valid)`,
+            });
+          } else {
+            results.push({
+              category: "Provider Failover",
+              check: `Auth: ${name}`,
+              status: isPrimary ? "fail" : "warn",
+              message: `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago${isPrimary ? " — PRIMARY MODEL" : ""}`,
+              fix: `Re-authenticate: openclaw models auth login --provider ${provider}`,
+            });
+          }
         } else if (remaining < 3600000) {
           results.push({
             category: "Provider Failover",

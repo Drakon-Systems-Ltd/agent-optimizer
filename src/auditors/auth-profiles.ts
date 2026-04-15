@@ -41,16 +41,30 @@ export function auditAuthProfiles(
 
   // Check for expired OAuth tokens
   const now = Date.now();
+
+  // Build a map of which providers have at least one valid token
+  const providerHasValid = new Map<string, boolean>();
+  for (const [, profile] of entries) {
+    if (!profile.provider) continue;
+    if (!profile.expires || profile.expires > now) {
+      providerHasValid.set(profile.provider, true);
+    }
+  }
+
   for (const [name, profile] of entries) {
     if (profile.expires) {
       const remaining = profile.expires - now;
       if (remaining < 0) {
+        // If another profile for the same provider is valid, downgrade to info (stale but harmless)
+        const otherValid = providerHasValid.get(profile.provider) === true;
         results.push({
           category: "Auth",
           check: `Token expiry: ${name}`,
-          status: "fail",
-          message: `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago`,
-          fix: `Re-authenticate: openclaw models auth login --provider ${profile.provider}`,
+          status: otherValid ? "info" : "fail",
+          message: otherValid
+            ? `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago (another ${profile.provider} profile is valid)`
+            : `OAuth token expired ${Math.abs(Math.round(remaining / 3600000))}h ago`,
+          fix: otherValid ? undefined : `Re-authenticate: openclaw models auth login --provider ${profile.provider}`,
         });
       } else if (remaining < 3600000) {
         results.push({
