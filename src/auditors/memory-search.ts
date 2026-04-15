@@ -1,0 +1,268 @@
+import type { AuditResult, OpenClawConfig } from "../types.js";
+
+// Embedding providers that need explicit API keys or auth
+const PROVIDERS_NEEDING_AUTH: Record<string, string> = {
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  voyage: "VOYAGE_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  "github-copilot": "COPILOT_GITHUB_TOKEN",
+};
+
+// Providers that work without external keys
+const LOCAL_PROVIDERS = ["local", "ollama"];
+
+// Default hybrid search weights
+const DEFAULT_VECTOR_WEIGHT = 0.7;
+const DEFAULT_TEXT_WEIGHT = 0.3;
+
+export function auditMemorySearch(config: OpenClawConfig): AuditResult[] {
+  const results: AuditResult[] = [];
+  const defaults = config.agents?.defaults;
+  const memorySearch = (defaults as Record<string, unknown> | undefined)?.memorySearch as
+    Record<string, unknown> | undefined;
+
+  // --- Memory search enabled check ---
+
+  if (!memorySearch) {
+    results.push({
+      category: "Memory Search",
+      check: "Memory search configured",
+      status: "info",
+      message: "No memorySearch config — OpenClaw auto-detects an embedding provider at startup",
+    });
+    return results;
+  }
+
+  const enabled = memorySearch.enabled;
+  if (enabled === false) {
+    results.push({
+      category: "Memory Search",
+      check: "Memory search enabled",
+      status: "warn",
+      message: "Memory search is explicitly disabled — recall will use FTS-only (no semantic search)",
+      fix: "Set agents.defaults.memorySearch.enabled to true, or remove the key to auto-detect",
+    });
+    return results;
+  }
+
+  results.push({
+    category: "Memory Search",
+    check: "Memory search enabled",
+    status: "pass",
+    message: "Memory search is enabled",
+  });
+
+  // --- Provider check ---
+
+  const provider = memorySearch.provider as string | undefined;
+  if (provider) {
+    const isLocal = LOCAL_PROVIDERS.includes(provider);
+    const envVar = PROVIDERS_NEEDING_AUTH[provider];
+
+    results.push({
+      category: "Memory Search",
+      check: "Embedding provider",
+      status: "pass",
+      message: isLocal
+        ? `Provider: ${provider} (local — no API key needed)`
+        : `Provider: ${provider}`,
+    });
+
+    if (envVar && !isLocal) {
+      results.push({
+        category: "Memory Search",
+        check: `Auth: ${provider}`,
+        status: "info",
+        message: `${provider} requires ${envVar} or matching models.providers entry`,
+      });
+    }
+  }
+
+  // --- Fallback provider ---
+
+  const fallback = memorySearch.fallback as string | undefined;
+  if (!fallback || fallback === "none") {
+    results.push({
+      category: "Memory Search",
+      check: "Embedding fallback",
+      status: "info",
+      message: "No embedding fallback — if primary provider fails, search degrades to FTS-only",
+    });
+  } else {
+    results.push({
+      category: "Memory Search",
+      check: "Embedding fallback",
+      status: "pass",
+      message: `Fallback provider: ${fallback}`,
+    });
+  }
+
+  // --- Hybrid search config ---
+
+  const query = memorySearch.query as Record<string, unknown> | undefined;
+  const hybrid = query?.hybrid as Record<string, unknown> | undefined;
+
+  if (hybrid) {
+    const vectorWeight = hybrid.vectorWeight as number | undefined;
+    const textWeight = hybrid.textWeight as number | undefined;
+
+    if (vectorWeight != null && textWeight != null) {
+      const sum = vectorWeight + textWeight;
+      if (Math.abs(sum - 1.0) > 0.01) {
+        results.push({
+          category: "Memory Search",
+          check: "Hybrid search weights",
+          status: "warn",
+          message: `vectorWeight (${vectorWeight}) + textWeight (${textWeight}) = ${sum} — should sum to 1.0`,
+          fix: "Adjust weights to sum to 1.0 (default: 0.7 vector + 0.3 text)",
+        });
+      } else if (vectorWeight < 0.3) {
+        results.push({
+          category: "Memory Search",
+          check: "Hybrid search weights",
+          status: "info",
+          message: `Low vector weight (${vectorWeight}) — semantic similarity has less influence than keyword matching`,
+        });
+      } else {
+        results.push({
+          category: "Memory Search",
+          check: "Hybrid search weights",
+          status: "pass",
+          message: `Hybrid weights: ${vectorWeight} vector / ${textWeight} text`,
+        });
+      }
+    }
+
+    if (hybrid.enabled === false) {
+      results.push({
+        category: "Memory Search",
+        check: "Hybrid search",
+        status: "warn",
+        message: "Hybrid search disabled — using vector-only search (misses keyword matches)",
+        fix: "Set agents.defaults.memorySearch.query.hybrid.enabled to true",
+      });
+    }
+  }
+
+  // --- Embedding cache ---
+
+  const cache = memorySearch.cache as Record<string, unknown> | undefined;
+  if (cache?.enabled === true) {
+    const maxEntries = (cache.maxEntries as number) ?? 50000;
+    results.push({
+      category: "Memory Search",
+      check: "Embedding cache",
+      status: "pass",
+      message: `Embedding cache enabled (max ${maxEntries.toLocaleString()} entries) — saves re-embedding on reindex`,
+    });
+  } else if (provider && !LOCAL_PROVIDERS.includes(provider)) {
+    results.push({
+      category: "Memory Search",
+      check: "Embedding cache",
+      status: "info",
+      message: "Embedding cache not enabled — reindexing re-embeds all chunks (costs tokens for cloud providers)",
+      fix: "Set agents.defaults.memorySearch.cache.enabled to true",
+    });
+  }
+
+  // --- SQLite vector acceleration ---
+
+  const store = memorySearch.store as Record<string, unknown> | undefined;
+  const vector = store?.vector as Record<string, unknown> | undefined;
+  if (vector?.enabled === false) {
+    results.push({
+      category: "Memory Search",
+      check: "Vector acceleration",
+      status: "warn",
+      message: "sqlite-vec disabled — vector search falls back to slow in-process cosine similarity",
+      fix: "Set agents.defaults.memorySearch.store.vector.enabled to true",
+    });
+  }
+
+  // --- Session memory (experimental) ---
+
+  const experimental = memorySearch.experimental as Record<string, unknown> | undefined;
+  if (experimental?.sessionMemory === true) {
+    results.push({
+      category: "Memory Search",
+      check: "Session memory indexing",
+      status: "info",
+      message: "Experimental session memory enabled — indexes transcripts for recall (results may be stale)",
+    });
+  }
+
+  // --- Dreaming config ---
+
+  const memoryCore = config.plugins?.entries?.["memory-core"];
+  const dreamingConfig = (memoryCore?.config as Record<string, unknown> | undefined)?.dreaming as
+    Record<string, unknown> | undefined;
+
+  if (dreamingConfig?.enabled === true) {
+    const freq = dreamingConfig.frequency as string | undefined;
+    results.push({
+      category: "Memory Search",
+      check: "Dreaming",
+      status: "pass",
+      message: `Dreaming enabled${freq ? ` (schedule: ${freq})` : ""} — writes to memory/.dreams/`,
+    });
+  }
+
+  // --- Active Memory plugin ---
+
+  const activeMemory = config.plugins?.entries?.["active-memory"];
+  if (activeMemory?.enabled === true) {
+    results.push({
+      category: "Memory Search",
+      check: "Active Memory plugin",
+      status: "pass",
+      message: "Active Memory sub-agent enabled — recalls context before each reply",
+    });
+  } else if (activeMemory?.enabled === false) {
+    results.push({
+      category: "Memory Search",
+      check: "Active Memory plugin",
+      status: "info",
+      message: "Active Memory plugin present but disabled",
+    });
+  }
+
+  // --- QMD backend ---
+
+  const memory = (config as Record<string, unknown>).memory as Record<string, unknown> | undefined;
+  if (memory?.backend === "qmd") {
+    const qmd = memory.qmd as Record<string, unknown> | undefined;
+    results.push({
+      category: "Memory Search",
+      check: "Memory backend",
+      status: "pass",
+      message: "Using QMD backend for memory search",
+    });
+
+    if (qmd) {
+      const limits = qmd.limits as Record<string, unknown> | undefined;
+      const maxResults = (limits?.maxResults as number) ?? 6;
+      if (maxResults > 12) {
+        results.push({
+          category: "Memory Search",
+          check: "QMD max results",
+          status: "warn",
+          message: `QMD maxResults is ${maxResults} — injecting too many memories burns context tokens`,
+          fix: "Set memory.qmd.limits.maxResults to 6-10",
+        });
+      }
+
+      const update = qmd.update as Record<string, unknown> | undefined;
+      if (update?.waitForBootSync === true) {
+        results.push({
+          category: "Memory Search",
+          check: "QMD boot sync",
+          status: "info",
+          message: "waitForBootSync enabled — gateway startup blocks until memory index is ready",
+        });
+      }
+    }
+  }
+
+  return results;
+}

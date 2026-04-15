@@ -4,6 +4,32 @@ const VALID_THINKING_DEFAULTS = [
   "off", "minimal", "low", "medium", "high", "xhigh", "adaptive",
 ];
 
+// Models with known aliases that should be canonicalized
+const MODEL_ALIASES: Record<string, { canonical: string; reason: string }> = {
+  "openai-codex/gpt-5.4-codex": {
+    canonical: "openai-codex/gpt-5.4",
+    reason: "legacy alias canonicalized in v2026.4.14",
+  },
+};
+
+// Models that don't support xhigh thinking
+const NO_XHIGH_THINKING = [
+  "openai/gpt-4o-mini",
+  "deepseek/deepseek-chat",
+  "google-ai/gemini-2.5-flash",
+];
+
+// Models where "minimal" thinking maps to "low" (OpenAI-compat)
+const MINIMAL_MAPS_TO_LOW = [
+  "openai/gpt-5.4",
+  "openai-codex/gpt-5.4",
+  "codex/gpt-5.4",
+  "openai/gpt-5.4-pro",
+  "openai-codex/gpt-5.4-pro",
+  "codex/gpt-5.4-pro",
+  "openai/gpt-4o",
+];
+
 export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];
   const defaults = config.agents?.defaults;
@@ -93,13 +119,54 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
     }
   }
 
+  // Check for legacy model aliases
+  const allModels = [defaults.model.primary, ...fallbacks];
+  for (const model of allModels) {
+    const alias = MODEL_ALIASES[model];
+    if (alias) {
+      results.push({
+        category: "Model Config",
+        check: `Model alias: ${model}`,
+        status: "warn",
+        message: `"${model}" is a legacy alias — ${alias.reason}`,
+        fix: `Replace with "${alias.canonical}"`,
+        autoFixable: true,
+      });
+    }
+  }
+
+  // Check thinkingDefault compatibility with primary model
+  if (defaults.thinkingDefault && defaults.model.primary) {
+    const thinking = defaults.thinkingDefault;
+    const primary = defaults.model.primary;
+
+    if (thinking === "xhigh" && NO_XHIGH_THINKING.some((m) => primary.startsWith(m))) {
+      results.push({
+        category: "Model Config",
+        check: "thinkingDefault compatibility",
+        status: "warn",
+        message: `thinkingDefault "xhigh" is not supported by ${primary} — will be downgraded or ignored`,
+        fix: 'Use "high" or "adaptive" instead',
+      });
+    }
+
+    if (thinking === "minimal" && MINIMAL_MAPS_TO_LOW.some((m) => primary === m || primary.startsWith(m))) {
+      results.push({
+        category: "Model Config",
+        check: "thinkingDefault mapping",
+        status: "info",
+        message: `"minimal" thinking maps to "low" for ${primary} (OpenAI-compatible models)`,
+      });
+    }
+  }
+
   // Check for unknown config keys that crash the gateway
   const knownDefaults = [
     "model", "models", "workspace", "contextTokens", "contextPruning",
     "compaction", "heartbeat", "maxConcurrent", "subagents", "thinkingDefault",
     "envelopeTimezone", "envelopeTimestamp", "memorySearch", "imageGenerationModel",
     "imageMaxDimensionPx", "fastMode", "dreaming", "activeMemory", "execPolicy",
-    "dmScope", "memory",
+    "dmScope", "memory", "experimental", "timeoutSeconds",
   ];
   if (defaults) {
     const unknown = Object.keys(defaults).filter(

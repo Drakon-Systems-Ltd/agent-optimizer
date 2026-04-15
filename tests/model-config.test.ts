@@ -103,4 +103,57 @@ describe("auditModelConfig", () => {
     const results = auditModelConfig(config);
     expect(results.some((r) => r.status === "pass" && r.check === "thinkingDefault value")).toBe(true);
   });
+
+  it("warns on legacy model alias in primary", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          model: { primary: "openai-codex/gpt-5.4-codex" },
+        },
+      },
+    };
+    const results = auditModelConfig(config);
+    expect(results.some((r) => r.status === "warn" && r.check.includes("alias"))).toBe(true);
+  });
+
+  it("warns on legacy model alias in fallbacks", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          model: {
+            primary: "anthropic/claude-sonnet-4-6",
+            fallbacks: ["openai-codex/gpt-5.4-codex"],
+          },
+        },
+      },
+    };
+    const results = auditModelConfig(config);
+    expect(results.some((r) => r.status === "warn" && r.message.includes("legacy alias"))).toBe(true);
+  });
+
+  it("warns when xhigh thinking used with unsupported model", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          model: { primary: "openai/gpt-4o-mini" },
+          thinkingDefault: "xhigh",
+        },
+      },
+    };
+    const results = auditModelConfig(config);
+    expect(results.some((r) => r.status === "warn" && r.check === "thinkingDefault compatibility")).toBe(true);
+  });
+
+  it("reports minimal-to-low mapping for OpenAI models", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          model: { primary: "openai-codex/gpt-5.4" },
+          thinkingDefault: "minimal",
+        },
+      },
+    };
+    const results = auditModelConfig(config);
+    expect(results.some((r) => r.status === "info" && r.check === "thinkingDefault mapping")).toBe(true);
+  });
 });

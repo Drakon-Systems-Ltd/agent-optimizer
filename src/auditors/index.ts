@@ -1,5 +1,5 @@
 import type { AuditOptions, AuditReport, AuditResult } from "../types.js";
-import { loadConfig, findAgentDir } from "../utils/config.js";
+import { loadConfig, findAgentDir, detectOpenClawVersion } from "../utils/config.js";
 import { auditModelConfig } from "./model-config.js";
 import { auditAuthProfiles } from "./auth-profiles.js";
 import { auditTokenEfficiency } from "./token-efficiency.js";
@@ -11,6 +11,9 @@ import { auditCacheEfficiency } from "./cache-efficiency.js";
 import { auditBootstrapFiles } from "./bootstrap-files.js";
 import { auditChannelSecurity } from "./channel-security.js";
 import { auditProviderFailover } from "./provider-failover.js";
+import { auditMemorySearch } from "./memory-search.js";
+import { auditLocalModels } from "./local-models.js";
+import { auditSecurityAdvisories } from "./security-advisories.js";
 
 export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   const config = loadConfig(opts.config);
@@ -20,6 +23,7 @@ export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   }
 
   const agentDir = opts.agentDir ?? findAgentDir(config);
+  const openclawVersion = detectOpenClawVersion() ?? "unknown";
   const results: AuditResult[] = [];
 
   results.push(...auditModelConfig(config));
@@ -33,6 +37,9 @@ export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   results.push(...auditToolPermissions(config));
   results.push(...auditProviderFailover(config, agentDir));
   results.push(...auditChannelSecurity(config));
+  results.push(...auditMemorySearch(config));
+  results.push(...auditLocalModels(config));
+  results.push(...auditSecurityAdvisories(openclawVersion));
 
   const summary = {
     total: results.length,
@@ -44,7 +51,7 @@ export async function runFullAudit(opts: AuditOptions): Promise<AuditReport> {
   return {
     timestamp: new Date().toISOString(),
     host: "localhost",
-    openclawVersion: "unknown",
+    openclawVersion,
     results,
     summary,
   };

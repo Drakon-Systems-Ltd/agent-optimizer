@@ -13,6 +13,7 @@ const PROVIDER_LATENCY: Record<string, "fast" | "medium" | "slow"> = {
   "deepseek": "medium",
   "xai": "medium",
   "codex": "fast",
+  "github-copilot": "fast",
   "lm-studio": "fast", // local
   "ollama": "fast", // local
   "arcee": "slow",
@@ -30,8 +31,11 @@ const PROVIDER_COST: Record<string, number> = {
   "claude-cli/claude-sonnet-4-5": 0,
   "claude-cli/claude-haiku-4-5": 0,
   "openai-codex/gpt-5.4": 0,
+  "openai-codex/gpt-5.4-pro": 0,
   "codex/gpt-5.4": 0,
+  "codex/gpt-5.4-pro": 0,
   "codex/gpt-4o": 0,
+  "github-copilot/gpt-5.4": 0,
   "openai/gpt-4o": 2.5,
   "openai/gpt-4o-mini": 0.15,
   "openrouter/moonshotai/kimi-k2.5": 1.0,
@@ -123,7 +127,7 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
   const now = Date.now();
   for (const model of allModels) {
     const provider = getProvider(model);
-    const isSubscription = provider === "claude-cli" || provider === "openai-codex" || provider === "codex";
+    const isSubscription = provider === "claude-cli" || provider === "openai-codex" || provider === "codex" || provider === "github-copilot";
     const isLocal = provider === "ollama" || provider === "lm-studio";
 
     if (isLocal) continue;

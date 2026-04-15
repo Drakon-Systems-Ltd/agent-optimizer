@@ -12,8 +12,11 @@ const MODEL_COSTS: Record<string, { input: number; output: number; cached?: numb
   "claude-cli/claude-sonnet-4-6": { input: 0, output: 0 }, // subscription
   "claude-cli/claude-sonnet-4-5": { input: 0, output: 0 }, // subscription
   "openai-codex/gpt-5.4": { input: 0, output: 0 }, // subscription
+  "openai-codex/gpt-5.4-pro": { input: 0, output: 0 }, // subscription (v2026.4.14+)
   "codex/gpt-5.4": { input: 0, output: 0 }, // bundled Codex provider (v2026.4.12+)
+  "codex/gpt-5.4-pro": { input: 0, output: 0 }, // bundled Codex provider
   "codex/gpt-4o": { input: 0, output: 0 }, // bundled Codex provider
+  "github-copilot/gpt-5.4": { input: 0, output: 0 }, // Copilot subscription
   "openai/gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
   "openai/gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
   "openrouter/moonshotai/kimi-k2.5": { input: 1.0, output: 4.0 },
@@ -160,9 +163,9 @@ export function auditCostEstimate(config: OpenClawConfig, agentDir?: string): Au
   }
 
   // Check if subscription models are available but not primary
-  const isSubscription = primary.startsWith("claude-cli/") || primary.startsWith("openai-codex/") || primary.startsWith("codex/") || primary.startsWith("lm-studio/");
+  const isSubscription = primary.startsWith("claude-cli/") || primary.startsWith("openai-codex/") || primary.startsWith("codex/") || primary.startsWith("github-copilot/") || primary.startsWith("lm-studio/");
   if (!isSubscription && estimate) {
-    const hasSubFallback = fallbacks.some((f) => f.startsWith("claude-cli/") || f.startsWith("openai-codex/") || f.startsWith("codex/"));
+    const hasSubFallback = fallbacks.some((f) => f.startsWith("claude-cli/") || f.startsWith("openai-codex/") || f.startsWith("codex/") || f.startsWith("github-copilot/"));
     if (hasSubFallback) {
       results.push({
         category: "Cost Estimate",
