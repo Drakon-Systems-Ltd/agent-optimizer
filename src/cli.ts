@@ -5,6 +5,13 @@ import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
 import { generateReport, printBanner, printScanResults } from "./reporters/index.js";
 import {
+  enrollMonitor,
+  runMonitor,
+  monitorStatus,
+  disableMonitor,
+  testMonitor,
+} from "./monitor/index.js";
+import {
   loadLicense,
   saveLicense,
   removeLicense,
@@ -51,6 +58,11 @@ program
       "",
       d("  FLEET") + d(" (£79+)"),
       `    ${w("fleet")} ${d("--hosts a,b,c [--json]")}             ${d("SSH fleet audit")}`,
+      "",
+      d("  MONITOR") + d(" (free beta — weekly email report)"),
+      `    ${w("monitor enroll")} ${d("<email>")}                     ${d("Enrol for daily monitoring")}`,
+      `    ${w("monitor status")}                             ${d("Show enrolment")}`,
+      `    ${w("monitor disable")}                            ${d("Remove monitoring")}`,
       "",
       d("  UTILITY"),
       `    ${w("buy")} ${d("[--tier solo|fleet]")}                    ${d("Open purchase page")}`,
@@ -253,6 +265,72 @@ program
       console.log(chalk.red(`\n  ✗ Update failed: ${(e as Error).message.split("\n")[0]}`));
       console.log(chalk.dim("  Try manually: npm install -g @drakon-systems/agent-optimizer@latest\n"));
     }
+  });
+
+// --- Monitor commands (subscription — Phase 1) ---
+
+const monitor = program
+  .command("monitor")
+  .description("Daily monitoring + weekly email digest (free beta)");
+
+monitor
+  .command("enroll <email>")
+  .description("Enrol this agent for daily monitoring")
+  .option("--name <name>", "Agent name (defaults to hostname)")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (email: string, opts: { name?: string; config: string }) => {
+    printBanner();
+    await enrollMonitor({
+      email,
+      agentName: opts.name,
+      configPath: opts.config,
+    });
+  });
+
+monitor
+  .command("run")
+  .description("Run the audit silently and ping the server (called by cron)")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (opts: { config: string }) => {
+    // No banner — this is silent cron-invoked
+    await runMonitor({ configPath: opts.config });
+  });
+
+monitor
+  .command("status")
+  .description("Show monitor enrolment status")
+  .action(() => {
+    printBanner();
+    monitorStatus();
+  });
+
+monitor
+  .command("test")
+  .description("Dry-run the audit and preview the payload (no POST)")
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (opts: { config: string }) => {
+    printBanner();
+    await testMonitor({ configPath: opts.config });
+  });
+
+monitor
+  .command("disable")
+  .description("Remove cron entry, delete local state, notify server")
+  .action(async () => {
+    printBanner();
+    await disableMonitor();
   });
 
 program

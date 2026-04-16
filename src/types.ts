@@ -133,3 +133,30 @@ export interface AuditOptions {
   fix?: boolean;
   deep?: boolean;
 }
+
+export interface MonitorState {
+  token: string;
+  email: string;
+  agentName: string;
+  enrolledAt: string;
+  apiBase: string;
+}
+
+export interface MonitorPingPayload {
+  token: string;
+  timestamp: string;
+  openclawVersion: string;
+  healthScore: number;
+  summary: {
+    pass: number;
+    warn: number;
+    fail: number;
+    info: number;
+    total: number;
+  };
+  issues: Array<{
+    category: string;
+    check: string;
+    status: "pass" | "warn" | "fail" | "info";
+  }>;
+}
