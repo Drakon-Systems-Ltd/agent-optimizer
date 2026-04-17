@@ -2,6 +2,7 @@ import { hostname } from "os";
 import chalk from "chalk";
 import type { AuditReport, MonitorPingPayload, MonitorState } from "../types.js";
 import { runFullAudit } from "../auditors/index.js";
+import { detectOpenClawVersion } from "../utils/config.js";
 import {
   DEFAULT_API_BASE,
   MONITOR_STATE_PATH,
@@ -94,7 +95,7 @@ export async function enrollMonitor(opts: {
       body: JSON.stringify({
         email: opts.email,
         agentName,
-        openclawVersion: "unknown",
+        openclawVersion: detectOpenClawVersion() ?? "unknown",
       }),
     });
 
