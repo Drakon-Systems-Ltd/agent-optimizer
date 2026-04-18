@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { createRequire } from "module";
 import type { AuditReport, AuditResult } from "../types.js";
+import { loadMonitorState } from "../monitor/state.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json");
@@ -168,6 +169,19 @@ export function generateReport(
     console.log(dim("  │ ") + red("→ ") + white("agent-optimizer buy") + dim("        open purchase page │"));
     console.log(dim("  │ ") + red("→ ") + white("agent-optimizer activate <key>") + dim(" activate      │"));
     console.log(dim("  └─────────────────────────────────────────────┘"));
+  }
+
+  // ── Monitor nudge for unenrolled users ───────────────────────────
+  // Only show when audit found issues — otherwise the nudge is noise.
+  const monitorState = loadMonitorState();
+  if (!monitorState && (warn > 0 || fail > 0)) {
+    console.log();
+    console.log(
+      dim("  💡 Track your health score over time and get weekly email reports:")
+    );
+    console.log(
+      dim("     ") + white("agent-optimizer monitor enroll <your@email>") + dim("  (free)")
+    );
   }
 
   console.log();
