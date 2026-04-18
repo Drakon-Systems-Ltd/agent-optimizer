@@ -10,6 +10,7 @@ import {
   monitorStatus,
   disableMonitor,
   testMonitor,
+  installCronOnly,
 } from "./monitor/index.js";
 import {
   loadLicense,
@@ -331,6 +332,14 @@ monitor
   .action(async () => {
     printBanner();
     await disableMonitor();
+  });
+
+monitor
+  .command("install-cron")
+  .description("Install the daily cron entry (for recovery if enroll failed partway)")
+  .action(() => {
+    printBanner();
+    installCronOnly();
   });
 
 program

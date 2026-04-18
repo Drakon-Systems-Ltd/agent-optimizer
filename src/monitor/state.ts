@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, appendFileSync } from "fs";
 import { dirname } from "path";
 import { homedir } from "os";
 import { resolve } from "path";
@@ -34,10 +34,9 @@ export function clearMonitorState(): boolean {
 }
 
 export function appendMonitorLog(message: string): void {
-  mkdirSync(dirname(MONITOR_LOG_PATH), { recursive: true });
-  const line = `[${new Date().toISOString()}] ${message}\n`;
   try {
-    const { appendFileSync } = require("fs") as typeof import("fs");
+    mkdirSync(dirname(MONITOR_LOG_PATH), { recursive: true });
+    const line = `[${new Date().toISOString()}] ${message}\n`;
     appendFileSync(MONITOR_LOG_PATH, line);
   } catch {
     // Swallow — logging must never crash the monitor

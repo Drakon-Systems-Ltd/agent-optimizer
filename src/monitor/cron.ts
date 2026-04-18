@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 
 const CRON_MARKER = "# agent-optimizer monitor";
 const CRON_LINE = `0 2 * * * agent-optimizer monitor run >/dev/null 2>&1 ${CRON_MARKER}`;
@@ -7,14 +7,11 @@ function readCrontab(): string {
   try {
     return execSync("crontab -l", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
   } catch {
-    // Empty crontab or no crontab for user — both are fine
     return "";
   }
 }
 
 function writeCrontab(contents: string): void {
-  // Use a heredoc via stdin to avoid tmp files
-  const { spawnSync } = require("child_process") as typeof import("child_process");
   const result = spawnSync("crontab", ["-"], {
     input: contents,
     encoding: "utf-8",

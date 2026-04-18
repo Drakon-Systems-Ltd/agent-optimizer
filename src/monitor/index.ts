@@ -14,6 +14,31 @@ import {
 } from "./state.js";
 import { installCron, isCronInstalled, isCronSupported, removeCron } from "./cron.js";
 
+export function installCronOnly(): void {
+  console.log(dim("  mode: ") + white("monitor install-cron\n"));
+  const state = loadMonitorState();
+  if (!state) {
+    console.log(red("  ░░ Not enrolled. Run: agent-optimizer monitor enroll <email>\n"));
+    process.exit(1);
+  }
+  if (!isCronSupported()) {
+    console.log(red("  ░░ Cron not supported on this platform.\n"));
+    process.exit(1);
+  }
+  if (isCronInstalled()) {
+    console.log(green("  ██ Cron already installed\n"));
+    return;
+  }
+  try {
+    installCron();
+    console.log(green("  ██ Cron installed\n"));
+    console.log(dim("  Next scan: tomorrow at 02:00\n"));
+  } catch (err) {
+    console.log(red(`  ░░ Failed: ${(err as Error).message}\n`));
+    process.exit(1);
+  }
+}
+
 const red = chalk.red;
 const green = chalk.green;
 const yellow = chalk.yellow;
