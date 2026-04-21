@@ -15,6 +15,7 @@ import { auditChannelSecurity } from "./channel-security.js";
 import { auditProviderFailover } from "./provider-failover.js";
 import { auditMemorySearch } from "./memory-search.js";
 import { auditLocalModels } from "./local-models.js";
+import { auditHooksDeprecations } from "./hooks-deprecations.js";
 import { auditSecurityAdvisories } from "./security-advisories.js";
 
 interface AuditorModule {
@@ -61,6 +62,7 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     { name: "Channel Security", run: () => auditChannelSecurity(config) },
     { name: "Memory Search", run: () => auditMemorySearch(config) },
     { name: "Local Models", run: () => auditLocalModels(config) },
+    { name: "Hooks Deprecations", run: () => auditHooksDeprecations(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 
