@@ -76,4 +76,13 @@ describe("auditPlugins", () => {
       results.some((r) => r.status === "info" && r.check.includes("some-custom-plugin"))
     ).toBe(true);
   });
+
+  it.each(["firecrawl", "openrouter", "github-copilot", "openai-codex"])(
+    "recognises newly-bundled %s as pass",
+    (name) => {
+      const config: OpenClawConfig = { plugins: { allow: [name], entries: {}, installs: {} } };
+      const results = auditPlugins(config);
+      expect(results.some(r => r.status === "pass" && r.message.includes("bundled"))).toBe(true);
+    }
+  );
 });

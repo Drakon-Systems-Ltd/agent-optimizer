@@ -5,8 +5,11 @@ import type { AuditResult, OpenClawConfig } from "../types.js";
 
 // Bundled plugins that don't require an install entry
 const BUNDLED_PLUGINS = [
+  // Core / messaging
   "memory-wiki", "memory-core", "browser", "telegram", "whatsapp",
   "discord", "matrix", "imessage", "voice", "dreaming", "active-memory",
+  // Added in v0.10.0 — newly bundled in OpenClaw v2026.3.14+
+  "firecrawl", "openrouter", "github-copilot", "openai-codex",
 ];
 
 export function auditPlugins(config: OpenClawConfig): AuditResult[] {
