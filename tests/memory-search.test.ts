@@ -155,6 +155,68 @@ describe("auditMemorySearch", () => {
     expect(results.some((r) => r.check === "Active Memory plugin" && r.status === "pass")).toBe(true);
   });
 
+  it("warns when local.contextSize is too small (<1024)", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          memorySearch: { provider: "local", local: { contextSize: 512 } },
+        } as any,
+      },
+    };
+    const results = auditMemorySearch(config);
+    expect(
+      results.some(
+        (r) => r.check === "Local embedding context size" && r.status === "warn"
+      )
+    ).toBe(true);
+  });
+
+  it("warns when local.contextSize is too large (>32768)", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          memorySearch: { provider: "local", local: { contextSize: 65536 } },
+        } as any,
+      },
+    };
+    const results = auditMemorySearch(config);
+    expect(
+      results.some(
+        (r) => r.check === "Local embedding context size" && r.status === "warn"
+      )
+    ).toBe(true);
+  });
+
+  it("passes when local.contextSize is in a sensible range", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          memorySearch: { provider: "local", local: { contextSize: 4096 } },
+        } as any,
+      },
+    };
+    const results = auditMemorySearch(config);
+    expect(
+      results.some(
+        (r) => r.check === "Local embedding context size" && r.status === "pass"
+      )
+    ).toBe(true);
+  });
+
+  it("does not emit local.contextSize check when field is unset", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          memorySearch: { provider: "local" },
+        } as any,
+      },
+    };
+    const results = auditMemorySearch(config);
+    expect(
+      results.some((r) => r.check === "Local embedding context size")
+    ).toBe(false);
+  });
+
   it("detects QMD backend with high maxResults", () => {
     const config: OpenClawConfig = {
       agents: { defaults: { memorySearch: {} } as any },

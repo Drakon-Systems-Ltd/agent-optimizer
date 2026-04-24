@@ -17,6 +17,8 @@ import { auditMemorySearch } from "./memory-search.js";
 import { auditLocalModels } from "./local-models.js";
 import { auditHooksDeprecations } from "./hooks-deprecations.js";
 import { auditSecurityAdvisories } from "./security-advisories.js";
+import { auditConfigPatchUsage } from "./config-patch-usage.js";
+import { auditDreamingCron } from "./dreaming-cron.js";
 
 interface AuditorModule {
   name: string;
@@ -63,6 +65,8 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     { name: "Memory Search", run: () => auditMemorySearch(config) },
     { name: "Local Models", run: () => auditLocalModels(config) },
     { name: "Hooks Deprecations", run: () => auditHooksDeprecations(config) },
+    { name: "Config Patch Usage", run: () => auditConfigPatchUsage(config) },
+    { name: "Dreaming Cron", run: () => auditDreamingCron(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 

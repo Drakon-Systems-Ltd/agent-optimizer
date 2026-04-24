@@ -166,6 +166,37 @@ export function auditMemorySearch(config: OpenClawConfig): AuditResult[] {
     }
   }
 
+  // --- Local embedding context size (v2026.4.23 added memorySearch.local.contextSize) ---
+
+  const local = memorySearch.local as Record<string, unknown> | undefined;
+  const contextSize = local?.contextSize as number | undefined;
+  if (typeof contextSize === "number") {
+    if (contextSize < 1024) {
+      results.push({
+        category: "Memory Search",
+        check: "Local embedding context size",
+        status: "warn",
+        message: `memorySearch.local.contextSize is ${contextSize} — below 1024 truncates most chunks and hurts recall quality. Default is 4096.`,
+        fix: "Set agents.defaults.memorySearch.local.contextSize to 4096 (or 2048 on severely constrained hosts).",
+      });
+    } else if (contextSize > 32768) {
+      results.push({
+        category: "Memory Search",
+        check: "Local embedding context size",
+        status: "warn",
+        message: `memorySearch.local.contextSize is ${contextSize} — above 32768 bloats embedding-host memory for no recall benefit on typical chunks. Default is 4096.`,
+        fix: "Lower agents.defaults.memorySearch.local.contextSize to 4096-16384.",
+      });
+    } else {
+      results.push({
+        category: "Memory Search",
+        check: "Local embedding context size",
+        status: "pass",
+        message: `Local embedding contextSize: ${contextSize} tokens (default 4096).`,
+      });
+    }
+  }
+
   // --- Fallback provider ---
 
   const fallback = memorySearch.fallback as string | undefined;

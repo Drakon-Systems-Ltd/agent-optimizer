@@ -1,10 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { auditBootstrapFiles } from "../src/auditors/bootstrap-files.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 const TEST_DIR = join(process.cwd(), "__test_bootstrap__");
+
+// macOS default APFS/HFS+ is case-insensitive, so `MEMORY.md` and `memory.md`
+// map to the same inode and can't coexist in a single directory. Linux is
+// case-sensitive. Detect at runtime so tests work on both.
+function detectCaseSensitiveFS(): boolean {
+  const probe = join(TEST_DIR, "__case_probe__");
+  mkdirSync(probe, { recursive: true });
+  writeFileSync(join(probe, "a"), "");
+  try {
+    writeFileSync(join(probe, "A"), "");
+    const entries = readdirSync(probe);
+    return entries.includes("a") && entries.includes("A");
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
 
 function makeConfig(workspace: string, overrides?: Record<string, unknown>): OpenClawConfig {
   return {
@@ -79,6 +97,32 @@ describe("auditBootstrapFiles", () => {
     const config = makeConfig(TEST_DIR);
     const results = auditBootstrapFiles(config);
     expect(results.some((r) => r.check === "Total bootstrap budget")).toBe(true);
+  });
+
+  const caseSensitive = detectCaseSensitiveFS();
+
+  it.skipIf(!caseSensitive)(
+    "warns when MEMORY.md and memory.md both exist (split-brain)",
+    () => {
+      writeFileSync(join(TEST_DIR, "MEMORY.md"), "# Upper\nCanonical.");
+      writeFileSync(join(TEST_DIR, "memory.md"), "# lower\nShould be merged.");
+      const config = makeConfig(TEST_DIR);
+      const results = auditBootstrapFiles(config);
+      const splitBrain = results.find(
+        (r) => r.status === "warn" && r.check === "MEMORY.md split-brain"
+      );
+      expect(splitBrain).toBeDefined();
+      expect(splitBrain!.message).toContain("memory.md");
+      expect(splitBrain!.message).toContain("MEMORY.md");
+      expect(splitBrain!.fix).toContain("openclaw doctor --fix");
+    }
+  );
+
+  it("does not warn split-brain when only MEMORY.md exists", () => {
+    writeFileSync(join(TEST_DIR, "MEMORY.md"), "# Memory\nOnly one.");
+    const config = makeConfig(TEST_DIR);
+    const results = auditBootstrapFiles(config);
+    expect(results.some((r) => r.check === "MEMORY.md split-brain")).toBe(false);
   });
 
   it("reports memory directory info", () => {

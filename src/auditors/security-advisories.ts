@@ -98,6 +98,14 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "Feishu webhook transport starts without encryptKey — accepts unauthenticated webhook payloads",
     fix: "Upgrade to OpenClaw v2026.4.15+",
   },
+  // v2026.4.23 fixes
+  {
+    fixedIn: "2026.4.23",
+    severity: "warn",
+    check: "config.patch allowlist lockdown",
+    message: "Gateway config.patch/config.apply runtime edits rely on a hand-maintained denylist — agents can mutate sensitive keys the denylist missed. Fixed in 2026.4.23 by allowlisting a narrow set of agent-tunable paths (prompt, model, mention-gating) and failing closed on everything else.",
+    fix: "Upgrade to OpenClaw v2026.4.23+. After upgrade, audit agent cron/hooks for config.patch usage — non-allowlisted mutations now silently fail.",
+  },
   // v2026.4.12 fixes
   {
     fixedIn: "2026.4.12",
