@@ -21,6 +21,7 @@ import { auditSecurityAdvisories } from "./security-advisories.js";
 import { auditConfigPatchUsage } from "./config-patch-usage.js";
 import { auditDreamingCron } from "./dreaming-cron.js";
 import { auditPairingCidrs } from "./pairing-cidrs.js";
+import { auditSandboxBackends } from "./sandbox-backends.js";
 
 interface AuditorModule {
   name: string;
@@ -71,6 +72,7 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     { name: "Config Patch Usage", run: () => auditConfigPatchUsage(config) },
     { name: "Dreaming Cron", run: () => auditDreamingCron(config) },
     { name: "Pairing CIDRs", run: () => auditPairingCidrs(config) },
+    { name: "Sandbox Backends", run: () => auditSandboxBackends(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 

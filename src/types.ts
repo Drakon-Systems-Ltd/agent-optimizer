@@ -44,6 +44,24 @@ export interface OpenClawConfig {
   };
   gateway?: Record<string, unknown>;
   channels?: Record<string, unknown>;
+  tools?: {
+    profile?: "minimal" | "coding" | "default";
+    sandbox?: {
+      backend?: string;
+      mode?: string;
+      ssh?: {
+        host?: string;
+        keyPath?: string;
+        certPath?: string;
+        knownHostsPath?: string;
+      };
+    };
+    byProvider?: Record<string, {
+      profile?: string;
+      allow?: string[];
+      deny?: string[];
+    }>;
+  };
   [key: string]: unknown;
 }
 
