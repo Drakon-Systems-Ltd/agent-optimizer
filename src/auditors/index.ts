@@ -23,6 +23,7 @@ import { auditDreamingCron } from "./dreaming-cron.js";
 import { auditPairingCidrs } from "./pairing-cidrs.js";
 import { auditSandboxBackends } from "./sandbox-backends.js";
 import { auditExecApprovals } from "./exec-approvals.js";
+import { auditToolsByProvider } from "./tools-by-provider.js";
 
 interface AuditorModule {
   name: string;
@@ -75,6 +76,7 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     { name: "Pairing CIDRs", run: () => auditPairingCidrs(config) },
     { name: "Sandbox Backends", run: () => auditSandboxBackends(config) },
     { name: "Exec Approvals", run: () => auditExecApprovals() },
+    { name: "Tools / byProvider", run: () => auditToolsByProvider(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 
