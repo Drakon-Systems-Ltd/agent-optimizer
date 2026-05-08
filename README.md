@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-130-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-236-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**70+ checks. 18 auditor modules. 160+ tests.**
+**100+ checks. 22 auditor modules. 230+ tests.**
 
 ## Install
 
@@ -120,7 +120,14 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Channel Security** | DM/group policies, allowlist gaps, mutable ID warnings |
 | **Memory Search** | Embedding provider, hybrid search weights, embedding cache, sqlite-vec acceleration, dreaming, active memory, QMD backend |
 | **Local Models** | localModelLean recommendation, context window vs model capacity, compaction reserve overflow, subagent/heartbeat limits, fallback resilience |
+| **Hooks Deprecations** | Flags legacy `hooks.internal.handlers[]` array format and the deprecated `before_agent_start` event |
+| **Hook Events** | Validates hook event names against the v2026.3.14 schema — typos that would silently never fire are caught at audit time |
+| **Config Patch Usage** | Scans hooks and agent `tool.alsoAllow` for `config.patch` / `config.apply` references that v2026.4.23 fails closed on |
+| **Dreaming Cron** | Reads `~/.openclaw/cron/jobs.json` and flags stale main-session dreaming jobs (v2026.4.23 decoupled dreaming from heartbeat) |
 | **Pairing CIDRs** | Validates `gateway.nodes.pairing.autoApproveCidrs` — flags `0.0.0.0/0`, public ranges, and overly wide private ranges that would auto-approve untrusted nodes |
+| **Sandbox Backends** | Validates `tools.sandbox.backend` (openshell / ssh / none / off) and SSH backend files (key, cert, known\_hosts) |
+| **Exec Approvals** | Flags malformed `~/.openclaw/exec-approvals.json` and approvals older than 90 days still active |
+| **Tools / byProvider** | Unknown profile names (`minimal` / `coding` / `default`), allow/deny conflicts per provider, empty provider keys |
 | **Security Advisories** | Version-aware checks against 16 known issues from v2026.4.12–4.24 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks, registerEmbeddedExtensionFactory removal) |
 
 ## Optimize Profiles
