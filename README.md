@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**70+ checks. 15 auditor modules. 130 tests.**
+**70+ checks. 18 auditor modules. 160+ tests.**
 
 ## Install
 
@@ -120,7 +120,8 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Channel Security** | DM/group policies, allowlist gaps, mutable ID warnings |
 | **Memory Search** | Embedding provider, hybrid search weights, embedding cache, sqlite-vec acceleration, dreaming, active memory, QMD backend |
 | **Local Models** | localModelLean recommendation, context window vs model capacity, compaction reserve overflow, subagent/heartbeat limits, fallback resilience |
-| **Security Advisories** | Version-aware checks against 14 known issues from v2026.4.12–4.15 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks) |
+| **Pairing CIDRs** | Validates `gateway.nodes.pairing.autoApproveCidrs` — flags `0.0.0.0/0`, public ranges, and overly wide private ranges that would auto-approve untrusted nodes |
+| **Security Advisories** | Version-aware checks against 16 known issues from v2026.4.12–4.24 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks, registerEmbeddedExtensionFactory removal) |
 
 ## Optimize Profiles
 
@@ -174,7 +175,7 @@ Security
   ✗ Advisory summary: 12 advisories (3 critical, 9 warnings) — upgrade to v2026.4.15+
 ```
 
-Covers 14 known issues across v2026.4.12 through v2026.4.15.
+Covers 16 known issues across v2026.4.12 through v2026.4.24, including the v2026.4.24 removal of `api.registerEmbeddedExtensionFactory()` that breaks plugins still using the old extension API.
 
 ## Licensing
 

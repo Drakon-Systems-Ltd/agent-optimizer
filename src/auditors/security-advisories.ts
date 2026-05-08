@@ -106,6 +106,21 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "Gateway config.patch/config.apply runtime edits rely on a hand-maintained denylist — agents can mutate sensitive keys the denylist missed. Fixed in 2026.4.23 by allowlisting a narrow set of agent-tunable paths (prompt, model, mention-gating) and failing closed on everything else.",
     fix: "Upgrade to OpenClaw v2026.4.23+. After upgrade, audit agent cron/hooks for config.patch usage — non-allowlisted mutations now silently fail.",
   },
+  // v2026.4.24 fixes
+  {
+    fixedIn: "2026.4.24",
+    severity: "fail",
+    check: "registerEmbeddedExtensionFactory removed",
+    message: "Plugins using api.registerEmbeddedExtensionFactory() will silently fail to load on v2026.4.24+. The Pi-only embedded-extension compatibility path was removed in favor of api.registerAgentToolResultMiddleware(), which targets the harness explicitly.",
+    fix: "Grep your plugin source for `registerEmbeddedExtensionFactory` and replace with `registerAgentToolResultMiddleware`, supplying the appropriate target harness. See OpenClaw v2026.4.24 release notes for the migration shape.",
+  },
+  {
+    fixedIn: "2026.4.24",
+    severity: "warn",
+    check: "Behind latest stable",
+    message: "OpenClaw v2026.4.24 is the current stable release. Older versions miss device-token scope-containment hardening, mixed-version gateway verification fixes, and the embedded-extension API removal that surfaces broken plugins.",
+    fix: "Run: npm install -g openclaw@latest",
+  },
   // v2026.4.12 fixes
   {
     fixedIn: "2026.4.12",
