@@ -15,7 +15,15 @@ import { auditChannelSecurity } from "./channel-security.js";
 import { auditProviderFailover } from "./provider-failover.js";
 import { auditMemorySearch } from "./memory-search.js";
 import { auditLocalModels } from "./local-models.js";
+import { auditHooksDeprecations } from "./hooks-deprecations.js";
+import { auditHookEvents } from "./hook-events.js";
 import { auditSecurityAdvisories } from "./security-advisories.js";
+import { auditConfigPatchUsage } from "./config-patch-usage.js";
+import { auditDreamingCron } from "./dreaming-cron.js";
+import { auditPairingCidrs } from "./pairing-cidrs.js";
+import { auditSandboxBackends } from "./sandbox-backends.js";
+import { auditExecApprovals } from "./exec-approvals.js";
+import { auditToolsByProvider } from "./tools-by-provider.js";
 
 interface AuditorModule {
   name: string;
@@ -61,6 +69,14 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     { name: "Channel Security", run: () => auditChannelSecurity(config) },
     { name: "Memory Search", run: () => auditMemorySearch(config) },
     { name: "Local Models", run: () => auditLocalModels(config) },
+    { name: "Hooks Deprecations", run: () => auditHooksDeprecations(config) },
+    { name: "Hook Events", run: () => auditHookEvents(config) },
+    { name: "Config Patch Usage", run: () => auditConfigPatchUsage(config) },
+    { name: "Dreaming Cron", run: () => auditDreamingCron(config) },
+    { name: "Pairing CIDRs", run: () => auditPairingCidrs(config) },
+    { name: "Sandbox Backends", run: () => auditSandboxBackends(config) },
+    { name: "Exec Approvals", run: () => auditExecApprovals() },
+    { name: "Tools / byProvider", run: () => auditToolsByProvider(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 

@@ -30,8 +30,38 @@ export interface OpenClawConfig {
     entries?: Record<string, { enabled?: boolean; config?: Record<string, unknown> }>;
     installs?: Record<string, PluginInstall>;
   };
+  hooks?: {
+    internal?: {
+      enabled?: boolean;
+      handlers?: Array<{ event?: string; module?: string }>; // legacy
+      entries?: Record<string, {
+        enabled?: boolean;
+        event?: string;
+        env?: Record<string, string>;
+      }>;
+      load?: { extraDirs?: string[] };
+    };
+  };
   gateway?: Record<string, unknown>;
   channels?: Record<string, unknown>;
+  tools?: {
+    profile?: "minimal" | "coding" | "default";
+    sandbox?: {
+      backend?: string;
+      mode?: string;
+      ssh?: {
+        host?: string;
+        keyPath?: string;
+        certPath?: string;
+        knownHostsPath?: string;
+      };
+    };
+    byProvider?: Record<string, {
+      profile?: string;
+      allow?: string[];
+      deny?: string[];
+    }>;
+  };
   [key: string]: unknown;
 }
 

@@ -37,6 +37,25 @@ export function auditBootstrapFiles(config: OpenClawConfig): AuditResult[] {
   const perFileMax = (defaults as Record<string, unknown>)?.bootstrapMaxChars as number ?? DEFAULT_PER_FILE_MAX;
   const totalMax = (defaults as Record<string, unknown>)?.bootstrapTotalMaxChars as number ?? DEFAULT_TOTAL_MAX;
 
+  // MEMORY.md split-brain (v2026.4.23): both MEMORY.md and memory.md present in workspace root.
+  // OpenClaw 2026.4.23 canonicalizes on MEMORY.md; `openclaw doctor --fix` merges the pair.
+  // Use directory listing (case-sensitive) so we don't false-positive on case-insensitive FS
+  // where existsSync("memory.md") returns true when only MEMORY.md is on disk.
+  try {
+    const rootEntries = readdirSync(wsPath);
+    const hasUpper = rootEntries.includes("MEMORY.md");
+    const hasLower = rootEntries.includes("memory.md");
+    if (hasUpper && hasLower) {
+      results.push({
+        category: "Bootstrap Files",
+        check: "MEMORY.md split-brain",
+        status: "warn",
+        message: "Both MEMORY.md and memory.md exist in workspace root — OpenClaw 2026.4.23 canonicalizes on MEMORY.md and will no longer treat memory.md as a runtime fallback.",
+        fix: "Run `openclaw doctor --fix` to merge memory.md into MEMORY.md (creates a backup automatically).",
+      });
+    }
+  } catch { /* unreadable workspace — other checks will catch it */ }
+
   let totalChars = 0;
   let filesFound = 0;
   let filesOverBudget = 0;

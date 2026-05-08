@@ -10,7 +10,7 @@ describe("auditSecurityAdvisories", () => {
   });
 
   it("returns pass when on latest version", () => {
-    const results = auditSecurityAdvisories("2026.4.15");
+    const results = auditSecurityAdvisories("2026.4.24");
     expect(results.some((r) => r.check === "Security advisories" && r.status === "pass")).toBe(true);
   });
 
@@ -60,5 +60,49 @@ describe("auditSecurityAdvisories", () => {
     expect(results.some((r) => r.check === "config.patch gateway bypass")).toBe(false);
     // But 4.15 fixes SHOULD be flagged
     expect(results.some((r) => r.check === "Approval prompt secret leak")).toBe(true);
+  });
+
+  it("flags config.patch allowlist lockdown for pre-4.23", () => {
+    const results = auditSecurityAdvisories("2026.4.22");
+    expect(
+      results.some(
+        (r) => r.check === "config.patch allowlist lockdown" && r.status === "warn"
+      )
+    ).toBe(true);
+  });
+
+  it("does not flag config.patch lockdown once on 4.23", () => {
+    const results = auditSecurityAdvisories("2026.4.23");
+    expect(
+      results.some((r) => r.check === "config.patch allowlist lockdown")
+    ).toBe(false);
+  });
+
+  it("flags removed registerEmbeddedExtensionFactory for pre-4.24", () => {
+    const results = auditSecurityAdvisories("2026.4.23");
+    const advisory = results.find(
+      (r) => r.check === "registerEmbeddedExtensionFactory removed"
+    );
+    expect(advisory).toBeDefined();
+    expect(advisory!.status).toBe("fail");
+    expect(advisory!.fix).toContain("registerAgentToolResultMiddleware");
+  });
+
+  it("nudges to latest stable for pre-4.24", () => {
+    const results = auditSecurityAdvisories("2026.4.23");
+    expect(
+      results.some((r) => r.check === "Behind latest stable" && r.status === "warn")
+    ).toBe(true);
+  });
+
+  it("returns clean once on 2026.4.24", () => {
+    const results = auditSecurityAdvisories("2026.4.24");
+    expect(
+      results.some((r) => r.check === "registerEmbeddedExtensionFactory removed")
+    ).toBe(false);
+    expect(results.some((r) => r.check === "Behind latest stable")).toBe(false);
+    expect(
+      results.some((r) => r.check === "Security advisories" && r.status === "pass")
+    ).toBe(true);
   });
 });
