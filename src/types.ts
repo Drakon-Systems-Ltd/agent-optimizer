@@ -160,6 +160,8 @@ export interface OptimizeOptions {
   profile: "minimal" | "balanced" | "aggressive";
   only?: string[];
   skip?: string[];
+  /** Target system. Auto-detected via detectSystems() when omitted. */
+  system?: "claude-code" | "openclaw";
 }
 
 export interface AuditOptions {

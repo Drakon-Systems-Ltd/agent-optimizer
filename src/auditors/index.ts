@@ -4,6 +4,7 @@ import type { AuditOptions, AuditReport, AuditResult, DetectedSystem } from "../
 import { loadConfig, findAgentDir, detectOpenClawVersion } from "../utils/config.js";
 import { detectSystems } from "../detect/index.js";
 import { runOpenClawAuditors } from "./openclaw/index.js";
+import { runClaudeCodeAuditors } from "./claude-code/index.js";
 
 export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): Promise<AuditReport> {
   const showProgress = !opts.json && !opts.silent;
@@ -57,7 +58,13 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
         ...runOpenClawAuditors({ config, agentDir, openclawVersion, showProgress })
       );
     }
-    // Future: if (system.kind === "claude-code") { results.push(...runClaudeCodeAuditors(...)); }
+  }
+
+  // Claude Code — runs after OpenClaw so spinner sequencing is clean.
+  // Synchronous filesystem ops; no spinner needed.
+  const ccSystems = systems.filter((s) => s.kind === "claude-code");
+  if (ccSystems.length > 0) {
+    results.push(...runClaudeCodeAuditors(ccSystems));
   }
 
   const summary = {

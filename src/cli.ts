@@ -470,6 +470,10 @@ program
     "--skip <tags>",
     "Skip these optimizations (comma-separated: context,heartbeat,subagents,compaction,pruning)"
   )
+  .option(
+    "--system <kind>",
+    "Target system: claude-code | openclaw (auto-detected if omitted)"
+  )
   .action(async (opts) => {
     const licensed = hasValidLicense();
     const effectiveDryRun = opts.dryRun || !licensed;
@@ -478,10 +482,16 @@ program
     const only = opts.only ? opts.only.split(",").map((t: string) => t.trim()) : undefined;
     const skip = opts.skip ? opts.skip.split(",").map((t: string) => t.trim()) : undefined;
 
+    // Validate --system flag
+    if (opts.system && opts.system !== "claude-code" && opts.system !== "openclaw") {
+      console.log(chalk.red(`Invalid --system value: "${opts.system}". Use claude-code or openclaw.`));
+      process.exit(1);
+    }
+
     printBanner();
-    console.log(chalk.dim("  mode: ") + chalk.white("optimize") + chalk.dim(` · ${effectiveDryRun ? "dry-run" : "apply"} · ${opts.profile}\n`));
+    console.log(chalk.dim("  mode: ") + chalk.white("optimize") + chalk.dim(` · ${effectiveDryRun ? "dry-run" : "apply"} · ${opts.profile}${opts.system ? ` · ${opts.system}` : ""}\n`));
     const { runOptimize } = await import("./optimizers/index.js");
-    await runOptimize({ ...opts, dryRun: effectiveDryRun, only, skip });
+    await runOptimize({ ...opts, dryRun: effectiveDryRun, only, skip, system: opts.system });
 
     if (!licensed) {
       console.log(
