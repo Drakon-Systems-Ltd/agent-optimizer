@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { runSecurityScan } from "../src/auditors/security-scan.js";
+import { runSecurityScan } from "../src/auditors/openclaw/security-scan.js";
 
 const TEST_DIR = join(process.cwd(), "__test_scan__");
 const SKILLS_DIR = join(TEST_DIR, "skills");

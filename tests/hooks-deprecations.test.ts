@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditHooksDeprecations } from "../src/auditors/hooks-deprecations.js";
+import { auditHooksDeprecations } from "../src/auditors/openclaw/hooks-deprecations.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditHooksDeprecations", () => {

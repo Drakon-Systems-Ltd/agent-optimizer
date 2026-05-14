@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditProviderFailover } from "../src/auditors/provider-failover.js";
+import { auditProviderFailover } from "../src/auditors/openclaw/provider-failover.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditProviderFailover", () => {

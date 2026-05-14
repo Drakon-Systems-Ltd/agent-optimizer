@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 // Known OpenClaw hook events as of v2026.3.14. Includes deprecated
 // before_agent_start (flagged separately by hooks-deprecations.ts).

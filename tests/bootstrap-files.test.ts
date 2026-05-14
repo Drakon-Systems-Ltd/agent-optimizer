@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
-import { auditBootstrapFiles } from "../src/auditors/bootstrap-files.js";
+import { auditBootstrapFiles } from "../src/auditors/openclaw/bootstrap-files.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 const TEST_DIR = join(process.cwd(), "__test_bootstrap__");

@@ -407,7 +407,7 @@ program
   .action(async (opts) => {
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("security scan\n"));
-    const { runSecurityScan } = await import("./auditors/security-scan.js");
+    const { runSecurityScan } = await import("./auditors/openclaw/security-scan.js");
     const results = await runSecurityScan(opts);
 
     printScanResults(results);
@@ -553,7 +553,7 @@ snapshot
   .action(async (opts) => {
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("snapshot save\n"));
-    const { saveSnapshot } = await import("./auditors/config-drift.js");
+    const { saveSnapshot } = await import("./auditors/openclaw/config-drift.js");
     saveSnapshot(opts.config, opts.name);
   });
 
@@ -561,7 +561,7 @@ snapshot
   .command("list")
   .description("List saved snapshots")
   .action(async () => {
-    const { listSnapshots } = await import("./auditors/config-drift.js");
+    const { listSnapshots } = await import("./auditors/openclaw/config-drift.js");
     listSnapshots();
   });
 
@@ -577,7 +577,7 @@ program
   .action(async (opts) => {
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
-    const { detectDrift } = await import("./auditors/config-drift.js");
+    const { detectDrift } = await import("./auditors/openclaw/config-drift.js");
     const results = detectDrift(opts.config, opts.name);
     generateReport(
       {
@@ -606,7 +606,7 @@ program
     requireLicense("fleet");
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("fleet audit\n"));
-    const { runFleetAudit } = await import("./auditors/fleet.js");
+    const { runFleetAudit } = await import("./auditors/openclaw/fleet.js");
     await runFleetAudit(opts);
   });
 

@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 const CONFIG_MUTATION_PATTERNS = ["config.patch", "config.apply"];
 

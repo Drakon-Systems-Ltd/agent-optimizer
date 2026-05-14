@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { loadAuthProfiles, expandPath } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { loadAuthProfiles, expandPath } from "../../utils/config.js";
 
 // Placeholder credentials shipped in .env.example that must be changed
 const PLACEHOLDER_PATTERNS = [

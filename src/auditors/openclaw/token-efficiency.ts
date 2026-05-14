@@ -1,5 +1,5 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { parseInterval } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { parseInterval } from "../../utils/config.js";
 
 export function auditTokenEfficiency(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditCacheEfficiency } from "../src/auditors/cache-efficiency.js";
+import { auditCacheEfficiency } from "../src/auditors/openclaw/cache-efficiency.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditCacheEfficiency", () => {

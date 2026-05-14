@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 interface ParsedCidr {
   family: 4 | 6;

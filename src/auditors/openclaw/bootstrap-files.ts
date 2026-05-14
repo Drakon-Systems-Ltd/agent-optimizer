@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, readdirSync } from "fs";
 import { join, resolve } from "path";
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { expandPath, findWorkspace } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { expandPath, findWorkspace } from "../../utils/config.js";
 
 const BOOTSTRAP_FILES = [
   "SOUL.md",

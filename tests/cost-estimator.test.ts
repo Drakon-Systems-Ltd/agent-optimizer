@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditCostEstimate } from "../src/auditors/cost-estimator.js";
+import { auditCostEstimate } from "../src/auditors/openclaw/cost-estimator.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditCostEstimate", () => {

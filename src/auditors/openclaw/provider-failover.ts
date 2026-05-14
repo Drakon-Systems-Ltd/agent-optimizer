@@ -1,5 +1,5 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { loadAuthProfiles, loadModelsJson, expandPath } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { loadAuthProfiles, loadModelsJson, expandPath } from "../../utils/config.js";
 
 // Known provider latency tiers (rough)
 const PROVIDER_LATENCY: Record<string, "fast" | "medium" | "slow"> = {

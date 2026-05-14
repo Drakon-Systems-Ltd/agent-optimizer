@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditTokenEfficiency } from "../src/auditors/token-efficiency.js";
+import { auditTokenEfficiency } from "../src/auditors/openclaw/token-efficiency.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditTokenEfficiency", () => {

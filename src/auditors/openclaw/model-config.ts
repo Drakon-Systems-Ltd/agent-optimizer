@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 const VALID_THINKING_DEFAULTS = [
   "off", "minimal", "low", "medium", "high", "xhigh", "adaptive",

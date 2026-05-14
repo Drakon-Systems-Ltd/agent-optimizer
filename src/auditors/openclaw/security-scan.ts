@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync, existsSync, statSync } from "fs";
 import { join, resolve, basename, dirname } from "path";
 import chalk from "chalk";
-import type { AuditResult } from "../types.js";
-import { expandPath, loadConfig, findWorkspace } from "../utils/config.js";
+import type { AuditResult } from "../../types.js";
+import { expandPath, loadConfig, findWorkspace } from "../../utils/config.js";
 
 // --- Pattern definitions ---
 

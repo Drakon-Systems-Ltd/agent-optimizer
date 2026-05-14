@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 const KNOWN_PROFILES = new Set(["minimal", "coding", "default"]);
 

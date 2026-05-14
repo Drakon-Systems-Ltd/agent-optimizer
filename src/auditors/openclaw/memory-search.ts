@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { expandPath } from "../utils/config.js";
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import { expandPath } from "../../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 // Embedding providers that need explicit API keys or auth
 const PROVIDERS_NEEDING_AUTH: Record<string, string> = {

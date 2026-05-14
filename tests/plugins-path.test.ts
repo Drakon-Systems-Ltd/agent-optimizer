@@ -7,7 +7,7 @@ vi.mock("fs", () => ({
 }));
 
 import { existsSync, readdirSync } from "fs";
-import { auditPlugins } from "../src/auditors/plugins.js";
+import { auditPlugins } from "../src/auditors/openclaw/plugins.js";
 
 describe("auditPlugins — legacy path", () => {
   beforeEach(() => vi.clearAllMocks());

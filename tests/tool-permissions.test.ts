@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditToolPermissions } from "../src/auditors/tool-permissions.js";
+import { auditToolPermissions } from "../src/auditors/openclaw/tool-permissions.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditToolPermissions", () => {

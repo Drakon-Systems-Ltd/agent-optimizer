@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditHookEvents } from "../src/auditors/hook-events.js";
+import { auditHookEvents } from "../src/auditors/openclaw/hook-events.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditHookEvents", () => {

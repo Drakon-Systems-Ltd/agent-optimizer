@@ -1,5 +1,5 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { parseInterval, loadModelsJson, expandPath } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { parseInterval, loadModelsJson, expandPath } from "../../utils/config.js";
 
 // Approximate token costs per million tokens (USD) for common models
 const MODEL_COSTS: Record<string, { input: number; output: number; cached?: number }> = {
