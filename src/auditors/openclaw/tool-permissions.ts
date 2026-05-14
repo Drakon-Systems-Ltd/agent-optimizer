@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 export function auditToolPermissions(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditModelConfig } from "../src/auditors/model-config.js";
+import { auditModelConfig } from "../src/auditors/openclaw/model-config.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditModelConfig", () => {

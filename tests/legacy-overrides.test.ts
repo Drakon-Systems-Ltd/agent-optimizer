@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { auditLegacyOverrides } from "../src/auditors/legacy-overrides.js";
+import { auditLegacyOverrides } from "../src/auditors/openclaw/legacy-overrides.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 const TEST_DIR = join(process.cwd(), "__test_legacy_overrides__");

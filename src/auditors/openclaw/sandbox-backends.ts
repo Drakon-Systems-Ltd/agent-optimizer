@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { expandPath } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { expandPath } from "../../utils/config.js";
 
 const KNOWN_BACKENDS = ["openshell", "ssh", "none", "off"];
 

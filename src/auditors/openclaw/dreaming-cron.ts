@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
-import { expandPath } from "../utils/config.js";
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import { expandPath } from "../../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 const DREAMING_PATTERN = /dreaming/i;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditChannelSecurity } from "../src/auditors/channel-security.js";
+import { auditChannelSecurity } from "../src/auditors/openclaw/channel-security.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditChannelSecurity", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditConfigPatchUsage } from "../src/auditors/config-patch-usage.js";
+import { auditConfigPatchUsage } from "../src/auditors/openclaw/config-patch-usage.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditConfigPatchUsage", () => {

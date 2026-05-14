@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import type { AuditResult } from "../types.js";
+import type { AuditResult } from "../../types.js";
 
 export async function runFleetAudit(opts: {
   hosts?: string;

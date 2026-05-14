@@ -2,8 +2,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join } from "path";
 import { homedir } from "os";
 import chalk from "chalk";
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { expandPath, loadConfig } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { expandPath, loadConfig } from "../../utils/config.js";
 
 const SNAPSHOT_DIR = join(homedir(), ".agent-optimizer", "snapshots");
 

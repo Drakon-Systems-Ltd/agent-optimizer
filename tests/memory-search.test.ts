@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditMemorySearch } from "../src/auditors/memory-search.js";
+import { auditMemorySearch } from "../src/auditors/openclaw/memory-search.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditMemorySearch", () => {

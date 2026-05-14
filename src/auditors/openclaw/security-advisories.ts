@@ -1,5 +1,5 @@
-import type { AuditResult } from "../types.js";
-import { isOlderThan } from "../utils/config.js";
+import type { AuditResult } from "../../types.js";
+import { isOlderThan } from "../../utils/config.js";
 
 interface SecurityAdvisory {
   fixedIn: string;

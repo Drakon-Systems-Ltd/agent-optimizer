@@ -5,11 +5,13 @@ export interface AuditResult {
   message: string;
   fix?: string;
   autoFixable?: boolean;
+  system?: SystemKind;
 }
 
 export interface AuditReport {
   timestamp: string;
   host: string;
+  systems: DetectedSystem[];
   openclawVersion: string;
   results: AuditResult[];
   summary: {
@@ -94,12 +96,16 @@ export interface AgentDefaults {
   heartbeat?: {
     every?: string;
     lightContext?: boolean;
+    isolatedSession?: boolean;
   };
   maxConcurrent?: number;
   subagents?: {
     maxConcurrent?: number;
   };
   thinkingDefault?: string;
+  imageMaxDimensionPx?: number;
+  bootstrapMaxChars?: number;
+  bootstrapTotalMaxChars?: number;
 }
 
 export interface AgentEntry {
@@ -189,4 +195,13 @@ export interface MonitorPingPayload {
     check: string;
     status: "pass" | "warn" | "fail" | "info";
   }>;
+}
+
+export type SystemKind = "claude-code" | "openclaw" | "cursor";
+
+export interface DetectedSystem {
+  kind: SystemKind;
+  version: string | null;
+  configPath: string;
+  scope: "user" | "project";
 }

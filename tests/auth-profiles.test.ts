@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { auditAuthProfiles } from "../src/auditors/auth-profiles.js";
+import { auditAuthProfiles } from "../src/auditors/openclaw/auth-profiles.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 const TEST_DIR = join(process.cwd(), "__test_auth_profiles__");

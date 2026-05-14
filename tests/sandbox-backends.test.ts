@@ -3,7 +3,7 @@ import type { OpenClawConfig } from "../src/types.js";
 
 vi.mock("fs", () => ({ existsSync: vi.fn() }));
 import { existsSync } from "fs";
-import { auditSandboxBackends } from "../src/auditors/sandbox-backends.js";
+import { auditSandboxBackends } from "../src/auditors/openclaw/sandbox-backends.js";
 
 describe("auditSandboxBackends", () => {
   beforeEach(() => vi.clearAllMocks());

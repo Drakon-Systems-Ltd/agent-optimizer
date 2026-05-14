@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { detectDrift, saveSnapshot } from "../src/auditors/config-drift.js";
+import { detectDrift, saveSnapshot } from "../src/auditors/openclaw/config-drift.js";
 
 const TEST_CONFIG_DIR = join(process.cwd(), "__test_drift__");
 const CONFIG_PATH = join(TEST_CONFIG_DIR, "openclaw.json");

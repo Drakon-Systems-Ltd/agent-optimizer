@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { resolve } from "path";
-import type { AuditResult, OpenClawConfig } from "../types.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 // Bundled plugins that don't require an install entry
 const BUNDLED_PLUGINS = [

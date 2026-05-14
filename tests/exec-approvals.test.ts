@@ -5,7 +5,7 @@ vi.mock("fs", () => ({
   readFileSync: vi.fn(),
 }));
 import { existsSync, readFileSync } from "fs";
-import { auditExecApprovals } from "../src/auditors/exec-approvals.js";
+import { auditExecApprovals } from "../src/auditors/openclaw/exec-approvals.js";
 
 describe("auditExecApprovals", () => {
   beforeEach(() => vi.clearAllMocks());

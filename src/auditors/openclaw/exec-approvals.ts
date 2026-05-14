@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { resolve } from "path";
-import type { AuditResult } from "../types.js";
+import type { AuditResult } from "../../types.js";
 
 interface ExecApproval { command?: string; grantedAt?: string }
 interface ExecApprovalsFile { approvals?: ExecApproval[]; socketPath?: string }

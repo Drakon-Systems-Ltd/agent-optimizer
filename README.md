@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-236-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-283-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**100+ checks. 22 auditor modules. 230+ tests.**
+**100+ checks. 22 auditor modules. 280+ tests. 17 optimize dimensions.**
 
 ## Install
 
@@ -26,6 +26,9 @@ No account. No sign-up. No credit card.
 ## Quick Start
 
 ```bash
+# See which Claude-family agent systems are installed
+agent-optimizer detect
+
 # Run your first audit (free — no license needed)
 agent-optimizer audit
 
@@ -138,20 +141,37 @@ agent-optimizer optimize --profile balanced        # Recommended (default)
 agent-optimizer optimize --profile aggressive      # Maximum savings
 ```
 
-| Profile | Context | Heartbeat | Subagents | Pruning TTL |
-|---------|---------|-----------|-----------|-------------|
-| minimal | 500K | 4h | 6 | 1h |
-| balanced | 200K | 6h | 4 | 2h |
-| aggressive | 100K | 12h | 2 | 30m |
+v0.10.3 expands optimize to **17 dimensions** across the same three profiles:
+
+| Dimension | minimal | balanced | aggressive |
+|---|---|---|---|
+| Context tokens | 500K | 200K | 100K |
+| Heartbeat | 4h | 6h | 12h |
+| Subagent concurrency | 6 | 4 | 2 |
+| Pruning TTL | 1h | 2h | 30m |
+| Image max dim (px) | 2000 | 1200 | 800 |
+| Bootstrap per-file chars | 100K | 20K | 10K |
+| Bootstrap total chars | 200K | 150K | 100K |
+| Isolated cron sessions | — | — | on |
+| Cache-TTL pruning | — | on | on |
+| Fallback chain min depth (info) | 1 | 2 | 3 |
+| Channel history limit | 100 | 50 | 20 |
+| Channel media max (MB) | 100 | 20 | 5 |
+| Channel text chunk | 4000 | 4000 | 2000 |
+| Discord thread idle (hrs) | 48 | 24 | 8 |
+| Channel→model routing (info) | — | — | suggest |
+| Tools profile | full | coding | minimal |
 
 Use `--only` and `--skip` to cherry-pick:
 
 ```bash
-agent-optimizer optimize --only heartbeat,pruning  # Just these two
-agent-optimizer optimize --skip context            # Everything except context
+agent-optimizer optimize --only heartbeat,channel-media-max  # Just these two
+agent-optimizer optimize --skip context                      # Everything except context
 ```
 
-Tags: `context`, `heartbeat`, `subagents`, `compaction`, `pruning`
+Tags: `context`, `heartbeat`, `subagents`, `compaction`, `pruning`, `image-max-dim`, `bootstrap-max-chars`, `bootstrap-total-max-chars`, `isolated-cron`, `cache-ttl-pruning`, `fallback-chain`, `channel-history-limit`, `channel-media-max`, `channel-text-chunk`, `discord-idle-hours`, `channel-model-routing`, `tools-profile`
+
+`fallback-chain` and `channel-model-routing` are info-only — they print in `--dry-run` but won't be auto-applied (they need human judgement).
 
 ## Config Drift Detection
 

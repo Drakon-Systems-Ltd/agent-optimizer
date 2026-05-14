@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { auditDreamingCron } from "../src/auditors/dreaming-cron.js";
+import { auditDreamingCron } from "../src/auditors/openclaw/dreaming-cron.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 const TEST_HOME = join(process.cwd(), "__test_dreaming_home__");

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditPairingCidrs, parseCidr } from "../src/auditors/pairing-cidrs.js";
+import { auditPairingCidrs, parseCidr } from "../src/auditors/openclaw/pairing-cidrs.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 function makeConfig(cidrs: unknown): OpenClawConfig {

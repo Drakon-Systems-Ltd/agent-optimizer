@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditSecurityAdvisories } from "../src/auditors/security-advisories.js";
+import { auditSecurityAdvisories } from "../src/auditors/openclaw/security-advisories.js";
 
 describe("auditSecurityAdvisories", () => {
   it("returns info when version is unknown", () => {

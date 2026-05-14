@@ -1,5 +1,5 @@
-import type { AuditResult, OpenClawConfig } from "../types.js";
-import { loadModelsJson } from "../utils/config.js";
+import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { loadModelsJson } from "../../utils/config.js";
 
 export function auditLegacyOverrides(
   config: OpenClawConfig,
