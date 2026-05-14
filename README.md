@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-283-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-348-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**100+ checks. 22 auditor modules. 280+ tests. 17 optimize dimensions.**
+**Multi-system: Claude Code + OpenClaw.** 26 auditor modules, 340+ tests, 22 optimize dimensions.
 
 ## Install
 
@@ -132,6 +132,15 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Exec Approvals** | Flags malformed `~/.openclaw/exec-approvals.json` and approvals older than 90 days still active |
 | **Tools / byProvider** | Unknown profile names (`minimal` / `coding` / `default`), allow/deny conflicts per provider, empty provider keys |
 | **Security Advisories** | Version-aware checks against 16 known issues from v2026.4.12–4.24 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks, registerEmbeddedExtensionFactory removal) |
+
+### Claude Code auditors (new in v0.11.0)
+
+| Auditor | Checks |
+|---|---|
+| **Settings Permissions** | `permissions.allow` size, missing `deny` list, over-permissive patterns (`Bash(*)`, `Read(*)`, `Bash(curl:*)`), allow/deny conflicts |
+| **Settings Hooks** | Unknown event names, hook count per event, missing/excessive timeouts, invalid matcher regex, empty hook blocks |
+| **MCP Servers** | Server count, missing `type`/`command`/`url`, unknown server types, empty env blocks |
+| **Memory Files** | CLAUDE.md size budget (user + project scope), drift between scopes, broken `@-imports` |
 
 ## Optimize Profiles
 
