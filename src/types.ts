@@ -96,12 +96,16 @@ export interface AgentDefaults {
   heartbeat?: {
     every?: string;
     lightContext?: boolean;
+    isolatedSession?: boolean;
   };
   maxConcurrent?: number;
   subagents?: {
     maxConcurrent?: number;
   };
   thinkingDefault?: string;
+  imageMaxDimensionPx?: number;
+  bootstrapMaxChars?: number;
+  bootstrapTotalMaxChars?: number;
 }
 
 export interface AgentEntry {
