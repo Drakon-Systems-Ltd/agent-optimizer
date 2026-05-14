@@ -190,3 +190,12 @@ export interface MonitorPingPayload {
     status: "pass" | "warn" | "fail" | "info";
   }>;
 }
+
+export type SystemKind = "claude-code" | "openclaw" | "cursor";
+
+export interface DetectedSystem {
+  kind: SystemKind;
+  version: string | null;
+  configPath: string;
+  scope: "user" | "project";
+}
