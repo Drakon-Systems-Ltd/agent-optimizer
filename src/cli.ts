@@ -365,6 +365,28 @@ program
 // --- Free commands (audit + scan show results, fixes are gated) ---
 
 program
+  .command("detect")
+  .description("List detected Claude-family agent systems (Claude Code, OpenClaw, Cursor)")
+  .option("--json", "Output as JSON")
+  .action(async (opts) => {
+    const { detectSystems } = await import("./detect/index.js");
+    const systems = detectSystems();
+    if (opts.json) {
+      console.log(JSON.stringify(systems, null, 2));
+      return;
+    }
+    if (systems.length === 0) {
+      console.log(chalk.dim("No Claude-family agent systems detected in this directory or home."));
+      return;
+    }
+    console.log(chalk.bold("Detected systems:"));
+    for (const s of systems) {
+      const ver = s.version ? chalk.cyan(` v${s.version}`) : "";
+      console.log(`  ${chalk.bold(s.kind)}${ver} ${chalk.dim(`(${s.scope})`)} → ${chalk.dim(s.configPath)}`);
+    }
+  });
+
+program
   .command("audit")
   .description("Run a full audit of your OpenClaw installation (free)")
   .option(
