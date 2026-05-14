@@ -5,11 +5,13 @@ export interface AuditResult {
   message: string;
   fix?: string;
   autoFixable?: boolean;
+  system?: SystemKind;
 }
 
 export interface AuditReport {
   timestamp: string;
   host: string;
+  systems: DetectedSystem[];
   openclawVersion: string;
   results: AuditResult[];
   summary: {

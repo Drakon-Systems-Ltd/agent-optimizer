@@ -605,6 +605,7 @@ program
       {
         timestamp: new Date().toISOString(),
         host: "localhost",
+        systems: [],
         openclawVersion: "unknown",
         results,
         summary: {
