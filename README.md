@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-348-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-393-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw.** 26 auditor modules, 340+ tests, 22 optimize dimensions.
+**Multi-system: Claude Code + OpenClaw.** 28 auditor modules, 390+ tests, 25 optimize dimensions. Current to OpenClaw v2026.6.
 
 ## Install
 
@@ -131,6 +131,9 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Sandbox Backends** | Validates `tools.sandbox.backend` (openshell / ssh / none / off) and SSH backend files (key, cert, known\_hosts) |
 | **Exec Approvals** | Flags malformed `~/.openclaw/exec-approvals.json` and approvals older than 90 days still active |
 | **Tools / byProvider** | Unknown profile names (`minimal` / `coding` / `default`), allow/deny conflicts per provider, empty provider keys |
+| **Compaction Engine** | Flags deprecated `compaction.provider: "lossless-claw"` (migrate to `plugins.slots.contextEngine`); warns when `doctor --fix` would refuse auto-migration |
+| **Vision Models** | Validates `agents.defaults.imageModel` + `tools.media.image.models` ref shape (`provider/model`); redundancy between the two knobs |
+| **Hook Events** | Now recognises v2026.6 events: `command`, `session:patch`, `gateway:shutdown`, `gateway:pre-restart`, plus bare event types |
 | **Security Advisories** | Version-aware checks against 16 known issues from v2026.4.12–4.24 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks, registerEmbeddedExtensionFactory removal) |
 
 ### Claude Code auditors (new in v0.11.0)
@@ -178,7 +181,7 @@ agent-optimizer optimize --only heartbeat,channel-media-max  # Just these two
 agent-optimizer optimize --skip context                      # Everything except context
 ```
 
-Tags: `context`, `heartbeat`, `subagents`, `compaction`, `pruning`, `image-max-dim`, `bootstrap-max-chars`, `bootstrap-total-max-chars`, `isolated-cron`, `cache-ttl-pruning`, `fallback-chain`, `channel-history-limit`, `channel-media-max`, `channel-text-chunk`, `discord-idle-hours`, `channel-model-routing`, `tools-profile`
+Tags: `context`, `heartbeat`, `subagents`, `compaction`, `pruning`, `image-max-dim`, `bootstrap-max-chars`, `bootstrap-total-max-chars`, `isolated-cron`, `cache-ttl-pruning`, `fallback-chain`, `channel-history-limit`, `channel-media-max`, `channel-text-chunk`, `discord-idle-hours`, `channel-model-routing`, `tools-profile`, `runRetries-cap`, `discord-suppress-embeds`, `slack-unfurl-links`
 
 `fallback-chain` and `channel-model-routing` are info-only — they print in `--dry-run` but won't be auto-applied (they need human judgement).
 
