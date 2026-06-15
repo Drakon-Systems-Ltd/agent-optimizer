@@ -23,6 +23,8 @@ import { auditPairingCidrs } from "./pairing-cidrs.js";
 import { auditSandboxBackends } from "./sandbox-backends.js";
 import { auditExecApprovals } from "./exec-approvals.js";
 import { auditToolsByProvider } from "./tools-by-provider.js";
+import { auditCompactionEngine } from "./compaction-engine.js";
+import { auditVisionModels } from "./vision-models.js";
 
 interface AuditorModule {
   name: string;
@@ -61,6 +63,8 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
     { name: "Sandbox Backends", run: () => auditSandboxBackends(config) },
     { name: "Exec Approvals", run: () => auditExecApprovals() },
     { name: "Tools / byProvider", run: () => auditToolsByProvider(config) },
+    { name: "Compaction Engine", run: () => auditCompactionEngine(config) },
+    { name: "Vision Models", run: () => auditVisionModels(config) },
     { name: "Security Advisories", run: () => auditSecurityAdvisories(openclawVersion) },
   ];
 
@@ -76,7 +80,19 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
     if (spinner) {
       spinner.text = chalk.dim(`Scanning ${auditor.name}... (${i + 1}/${auditors.length})`);
     }
-    results.push(...auditor.run().map((r) => ({ ...r, system: "openclaw" as const })));
+    // Isolate each auditor: a throw on malformed config must not abort the whole
+    // run (auditing broken configs is the point). Surface the failure as a result.
+    try {
+      results.push(...auditor.run().map((r) => ({ ...r, system: "openclaw" as const })));
+    } catch (err) {
+      results.push({
+        category: auditor.name,
+        check: `${auditor.name} auditor`,
+        status: "warn",
+        message: `Auditor "${auditor.name}" errored on this config and was skipped: ${(err as Error).message}`,
+        system: "openclaw" as const,
+      });
+    }
   }
 
   if (spinner) {
