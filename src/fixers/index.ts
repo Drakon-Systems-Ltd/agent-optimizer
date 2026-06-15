@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync } from "fs";
 import { resolve } from "path";
 import { expandPath } from "../utils/config.js";
 import type { AuditReport, AuditResult, FixOperation } from "../types.js";
@@ -25,10 +25,21 @@ type Json = Record<string, unknown>;
 // index into arrays. Returns null if any intermediate segment is missing or not
 // an object/array — we only edit paths that already exist (these are fixes to
 // existing values, never key creation).
+
+// Reject keys that could pollute prototypes or truncate arrays. This engine is
+// exported and only as safe as its inputs, so it refuses dangerous segments
+// outright rather than trusting every caller.
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype", "length"]);
+
+function ownProp(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 function resolveParent(
   root: unknown,
   parts: string[]
 ): { parent: Record<string, unknown>; key: string } | null {
+  if (parts.some((p) => UNSAFE_KEYS.has(p) || p === "")) return null;
   let obj: unknown = root;
   for (let i = 0; i < parts.length - 1; i++) {
     if (obj === null || typeof obj !== "object") return null;
@@ -53,7 +64,8 @@ export function applyOp(root: Json, op: FixOperation): boolean {
       return true;
     }
     case "delete": {
-      if (!(key in parent)) return false;
+      if (Array.isArray(parent)) return false; // never delete array indices (leaves holes)
+      if (!ownProp(parent, key)) return false;
       delete parent[key];
       return true;
     }
@@ -157,8 +169,14 @@ export function applyFixes(report: AuditReport, opts: ApplyFixesOpts): FixApplyR
 
     const backup = `${file}${BACKUP_SUFFIX}`;
     if (!dryRun) {
-      copyFileSync(file, backup);
-      writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
+      // Never clobber an existing backup: the first one holds the pristine
+      // pre-fix original, which is the only artifact that can undo repeated runs.
+      if (!existsSync(backup)) copyFileSync(file, backup);
+      // Write atomically (temp + rename) so a crash mid-write can never leave a
+      // truncated config — the original stays intact until rename swaps it in.
+      const tmp = `${file}.tmp-${process.pid}`;
+      writeFileSync(tmp, JSON.stringify(json, null, 2) + "\n");
+      renameSync(tmp, file);
     }
     files.push({ file, backup, opsApplied: changed });
     applied += changed;

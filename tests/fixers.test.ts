@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { applyOp, applyFixes, findingsWithFixes } from "../src/fixers/index.js";
 import type { AuditReport, AuditResult, FixOperation } from "../src/types.js";
@@ -58,6 +58,26 @@ describe("applyOp", () => {
   it("returns false for a path whose parent does not exist", () => {
     const root: Record<string, unknown> = {};
     expect(applyOp(root, { target: "config", op: "set", path: "a.b.c", value: 1 })).toBe(false);
+  });
+
+  it("refuses prototype-polluting and array-truncating keys", () => {
+    const root: Record<string, unknown> = { a: { x: 1 }, arr: ["a", "b", "c"] };
+    expect(applyOp(root, { target: "config", op: "set", path: "a.__proto__.polluted", value: "y" })).toBe(false);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(applyOp(root, { target: "config", op: "set", path: "a.constructor", value: "y" })).toBe(false);
+    expect(applyOp(root, { target: "config", op: "set", path: "arr.length", value: 1 })).toBe(false);
+    expect(root.arr).toEqual(["a", "b", "c"]);
+  });
+
+  it("delete does not count inherited prototype properties as a change", () => {
+    const root: Record<string, unknown> = { a: {} };
+    expect(applyOp(root, { target: "config", op: "delete", path: "a.toString" })).toBe(false);
+  });
+
+  it("delete refuses array indices", () => {
+    const root: Record<string, unknown> = { arr: ["a", "b"] };
+    expect(applyOp(root, { target: "config", op: "delete", path: "arr.0" })).toBe(false);
+    expect(root.arr).toEqual(["a", "b"]);
   });
 });
 
@@ -172,6 +192,25 @@ describe("applyFixes", () => {
     const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
     expect(result.applied).toBe(0);
     expect(() => applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR })).not.toThrow();
+  });
+
+  it("never clobbers an existing .pre-fix.bak (preserves the pristine original)", () => {
+    const original = readFileSync(CONFIG, "utf-8");
+    const r1 = report([fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }])]);
+    applyFixes(r1, { configPath: CONFIG, agentDir: AGENT_DIR });
+    expect(readFileSync(`${CONFIG}.pre-fix.bak`, "utf-8")).toBe(original);
+
+    // A second writing run (different fix) must NOT overwrite the original backup.
+    const r2 = report([fix([{ target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: ["p"] }])]);
+    applyFixes(r2, { configPath: CONFIG, agentDir: AGENT_DIR });
+    expect(readFileSync(`${CONFIG}.pre-fix.bak`, "utf-8")).toBe(original);
+  });
+
+  it("leaves a temp file behavior clean (atomic write replaces, no .tmp left)", () => {
+    const r = report([fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }])]);
+    applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    const leftover = readdirSync(TEST_DIR).filter((f) => f.includes(".tmp-"));
+    expect(leftover).toHaveLength(0);
   });
 
   it("ignores findings without an apply payload", () => {

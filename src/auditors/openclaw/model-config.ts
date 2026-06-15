@@ -157,19 +157,15 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
       ])
     );
   }
-  // De-dupe alias values so we emit one arrayReplace per distinct legacy alias.
+  // De-dupe alias values so we emit one fix per distinct legacy alias. If the
+  // canonical form is ALREADY present elsewhere in fallbacks, canonicalising the
+  // alias would just create a duplicate — drop the stale alias instead.
   for (const alias of [...new Set(fallbacks.filter((fb) => MODEL_ALIASES[fb]))]) {
-    results.push(
-      aliasFinding(alias, [
-        {
-          target: "config",
-          op: "arrayReplace",
-          path: "agents.defaults.model.fallbacks",
-          match: alias,
-          value: MODEL_ALIASES[alias].canonical,
-        },
-      ])
-    );
+    const canonical = MODEL_ALIASES[alias].canonical;
+    const op: FixOperation = fallbacks.includes(canonical)
+      ? { target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: [alias] }
+      : { target: "config", op: "arrayReplace", path: "agents.defaults.model.fallbacks", match: alias, value: canonical };
+    results.push(aliasFinding(alias, [op]));
   }
 
   // Check thinkingDefault compatibility with primary model

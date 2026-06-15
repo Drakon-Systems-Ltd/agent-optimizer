@@ -117,36 +117,39 @@ function printUpgradePrompt(feature: string): void {
 
 function printFixSummary(
   result: import("./fixers/index.js").FixApplyResult,
-  manualCount: number
+  manualCount: number,
+  out: (msg: string) => void = console.log
 ): void {
   if (result.applied === 0) {
-    console.log(chalk.dim("\n  No changes written (fixes were already applied or files unavailable)."));
+    out(chalk.dim("\n  No changes written (fixes were already applied or files unavailable)."));
     return;
   }
 
   if (result.dryRun) {
-    console.log(
+    out(
       chalk.bold(`\n  Dry run — ${result.applied} fix(es) across ${result.files.length} file(s) would be applied:`)
     );
     for (const f of result.files) {
-      console.log(`    ${chalk.yellow("→")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
+      out(`    ${chalk.yellow("→")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
     }
-    console.log(chalk.dim("\n  Run without --dry-run to apply."));
+    out(chalk.dim("\n  Run without --dry-run to apply."));
   } else {
-    console.log(
+    out(
       chalk.green(`\n  ✓ Applied ${result.applied} fix(es) across ${result.files.length} file(s)`)
     );
     for (const f of result.files) {
-      console.log(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
-      console.log(chalk.dim(`      backup: ${f.backup}`));
-      console.log(chalk.dim(`      undo:   cp "${f.backup}" "${f.file}"`));
+      out(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
+      out(chalk.dim(`      backup: ${f.backup}`));
+      out(chalk.dim(`      undo:   cp "${f.backup}" "${f.file}"`));
     }
-    console.log(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-    console.log(chalk.dim("  Or undo everything with: agent-optimizer rollback"));
+    // `rollback` restores the openclaw.json only; per-file cp commands above cover
+    // every touched file (including models.json), so point users there.
+    out(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
+    out(chalk.dim("  Undo: run the per-file cp command(s) above, or `agent-optimizer rollback` for the config."));
   }
 
   if (manualCount > 0) {
-    console.log(chalk.dim(`\n  Note: ${manualCount} other fixable finding(s) need manual action — see fix text above.`));
+    out(chalk.dim(`\n  Note: ${manualCount} other fixable finding(s) need manual action — see fix text above.`));
   }
 }
 
@@ -451,25 +454,35 @@ program
     generateReport(results, { ...opts, licensed });
 
     if (opts.fix) {
+      // In --json mode, keep stdout clean: send all fix-summary text to stderr.
+      const out = opts.json ? console.error : console.log;
       const { applyFixes, findingsWithFixes, autoFixableWithoutPayload } =
         await import("./fixers/index.js");
-      const { loadConfig, findAgentDir } = await import("./utils/config.js");
+      const { loadConfig, findAgentDir, expandPath } = await import("./utils/config.js");
 
       const fixable = findingsWithFixes(results);
       const manual = autoFixableWithoutPayload(results);
 
       if (fixable.length === 0) {
-        console.log(chalk.dim("\n  No machine-applicable fixes found."));
+        out(chalk.dim("\n  No machine-applicable fixes found."));
         if (manual > 0) {
-          console.log(chalk.dim(`  (${manual} fixable finding(s) need manual action — see fix text above)`));
+          out(chalk.dim(`  (${manual} fixable finding(s) need manual action — see fix text above)`));
         }
         return;
       }
 
       const config = loadConfig(opts.config);
       const agentDir = opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
-      const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
-      printFixSummary(result, manual);
+      const configFull = expandPath(opts.config);
+      try {
+        const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
+        printFixSummary(result, manual, out);
+      } catch (err) {
+        out(chalk.red(`\n  ✗ Fix application failed partway: ${(err as Error).message}`));
+        out(chalk.dim("  Any file already written has a .pre-fix.bak alongside it — restore with:"));
+        out(chalk.dim(`    cp "${configFull}.pre-fix.bak" "${configFull}"`));
+        process.exitCode = 1;
+      }
     }
   });
 
@@ -623,12 +636,33 @@ program
       // Can't diff — just restore
     }
 
-    // Restore
+    // Restore the config
     copyFileSync(backupPath, configPath);
     console.log(chalk.green("  ✓ Config restored from backup"));
     console.log(chalk.dim(`  Restored: ${configPath}`));
-    console.log(chalk.dim(`  From:     ${backupPath}\n`));
-    console.log(chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
+    console.log(chalk.dim(`  From:     ${backupPath}`));
+
+    // `audit --fix` can also edit models.json — restore its backup too so the
+    // undo is complete (the fix summary's "rollback" pointer stays honest).
+    try {
+      const { resolve } = await import("path");
+      const { loadConfig, findAgentDir } = await import("./utils/config.js");
+      const restored = loadConfig(opts.config);
+      const agentDir = restored ? findAgentDir(restored) : null;
+      if (agentDir) {
+        const modelsPath = resolve(expandPath(agentDir), "models.json");
+        const modelsBackup = `${modelsPath}.pre-fix.bak`;
+        if (existsSync(modelsBackup)) {
+          copyFileSync(modelsBackup, modelsPath);
+          console.log(chalk.green("  ✓ models.json restored from backup"));
+          console.log(chalk.dim(`  Restored: ${modelsPath}`));
+        }
+      }
+    } catch {
+      // models.json restore is best-effort — the config restore already succeeded.
+    }
+
+    console.log(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
   });
 
 // --- Snapshot & drift ---
