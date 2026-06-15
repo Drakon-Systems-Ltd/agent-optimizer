@@ -115,6 +115,41 @@ function printUpgradePrompt(feature: string): void {
   );
 }
 
+function printFixSummary(
+  result: import("./fixers/index.js").FixApplyResult,
+  manualCount: number
+): void {
+  if (result.applied === 0) {
+    console.log(chalk.dim("\n  No changes written (fixes were already applied or files unavailable)."));
+    return;
+  }
+
+  if (result.dryRun) {
+    console.log(
+      chalk.bold(`\n  Dry run — ${result.applied} fix(es) across ${result.files.length} file(s) would be applied:`)
+    );
+    for (const f of result.files) {
+      console.log(`    ${chalk.yellow("→")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
+    }
+    console.log(chalk.dim("\n  Run without --dry-run to apply."));
+  } else {
+    console.log(
+      chalk.green(`\n  ✓ Applied ${result.applied} fix(es) across ${result.files.length} file(s)`)
+    );
+    for (const f of result.files) {
+      console.log(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
+      console.log(chalk.dim(`      backup: ${f.backup}`));
+      console.log(chalk.dim(`      undo:   cp "${f.backup}" "${f.file}"`));
+    }
+    console.log(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
+    console.log(chalk.dim("  Or undo everything with: agent-optimizer rollback"));
+  }
+
+  if (manualCount > 0) {
+    console.log(chalk.dim(`\n  Note: ${manualCount} other fixable finding(s) need manual action — see fix text above.`));
+  }
+}
+
 function requireLicense(command: string): License {
   const license = hasValidLicense();
   if (!license) {
@@ -397,6 +432,7 @@ program
   .option("-a, --agent-dir <path>", "Path to agent directory")
   .option("--json", "Output results as JSON")
   .option("--fix", "Apply safe fixes automatically (requires license)")
+  .option("--dry-run", "With --fix: preview the fixes without writing any files")
   .option("--deep", "Include live gateway probes")
   .action(async (opts) => {
     const licensed = !!hasValidLicense();
@@ -413,6 +449,28 @@ program
     printBanner();
     const results = await runFullAudit(opts);
     generateReport(results, { ...opts, licensed });
+
+    if (opts.fix) {
+      const { applyFixes, findingsWithFixes, autoFixableWithoutPayload } =
+        await import("./fixers/index.js");
+      const { loadConfig, findAgentDir } = await import("./utils/config.js");
+
+      const fixable = findingsWithFixes(results);
+      const manual = autoFixableWithoutPayload(results);
+
+      if (fixable.length === 0) {
+        console.log(chalk.dim("\n  No machine-applicable fixes found."));
+        if (manual > 0) {
+          console.log(chalk.dim(`  (${manual} fixable finding(s) need manual action — see fix text above)`));
+        }
+        return;
+      }
+
+      const config = loadConfig(opts.config);
+      const agentDir = opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
+      const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
+      printFixSummary(result, manual);
+    }
   });
 
 program
@@ -512,28 +570,34 @@ program
 
 program
   .command("rollback")
-  .description("Restore config from the last pre-optimize backup")
+  .description("Restore config from the last optimize/fix backup")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
     "~/.openclaw/openclaw.json"
   )
   .action(async (opts) => {
-    const { existsSync, copyFileSync, readFileSync } = await import("fs");
+    const { existsSync, copyFileSync, readFileSync, statSync } = await import("fs");
     const { expandPath } = await import("./utils/config.js");
 
     const configPath = expandPath(opts.config);
-    const backupPath = `${configPath}.pre-optimize.bak`;
+    // Restore from whichever backup is newest: optimize writes .pre-optimize.bak,
+    // `audit --fix` writes .pre-fix.bak.
+    const candidates = [`${configPath}.pre-fix.bak`, `${configPath}.pre-optimize.bak`].filter(
+      (p) => existsSync(p)
+    );
 
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("rollback\n"));
 
-    if (!existsSync(backupPath)) {
+    if (candidates.length === 0) {
       console.log(chalk.yellow("  No backup found."));
-      console.log(chalk.dim(`  Expected: ${backupPath}`));
-      console.log(chalk.dim("  Backups are created automatically when you run: agent-optimizer optimize\n"));
+      console.log(chalk.dim(`  Expected: ${configPath}.pre-optimize.bak or ${configPath}.pre-fix.bak`));
+      console.log(chalk.dim("  Backups are created automatically by: agent-optimizer optimize  /  agent-optimizer audit --fix\n"));
       process.exit(1);
     }
+
+    const backupPath = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
 
     // Show what's different
     try {

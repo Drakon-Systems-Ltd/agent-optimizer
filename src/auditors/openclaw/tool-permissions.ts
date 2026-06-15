@@ -4,7 +4,8 @@ export function auditToolPermissions(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];
   const list = config.agents?.list ?? [];
 
-  for (const agent of list) {
+  for (let agentIndex = 0; agentIndex < list.length; agentIndex++) {
+    const agent = list[agentIndex];
     const tools = agent.tools;
     if (!tools) {
       results.push({
@@ -29,6 +30,14 @@ export function auditToolPermissions(config: OpenClawConfig): AuditResult[] {
         message: `Groups in both alsoAllow and deny: ${conflicts.join(", ")}`,
         fix: "Remove conflicting entries from deny",
         autoFixable: true,
+        apply: [
+          {
+            target: "config",
+            op: "arrayRemove",
+            path: `agents.list.${agentIndex}.tools.deny`,
+            remove: conflicts,
+          },
+        ],
       });
     }
 

@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../../types.js";
+import type { AuditResult, OpenClawConfig, FixOperation } from "../../types.js";
 
 const VALID_THINKING_DEFAULTS = [
   "off", "minimal", "low", "medium", "high", "xhigh", "adaptive",
@@ -72,6 +72,14 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
         message: `Primary model "${defaults.model.primary}" also listed in fallbacks — wastes a fallback slot`,
         fix: "Remove primary model from fallbacks array",
         autoFixable: true,
+        apply: [
+          {
+            target: "config",
+            op: "arrayRemove",
+            path: "agents.defaults.model.fallbacks",
+            remove: [defaults.model.primary],
+          },
+        ],
       });
     }
 
@@ -106,8 +114,13 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
         check: "thinkingDefault value",
         status: "fail",
         message: `Invalid thinkingDefault: "${defaults.thinkingDefault}" — will crash gateway`,
-        fix: `Set to one of: ${VALID_THINKING_DEFAULTS.join(", ")}`,
+        fix: `Set to one of: ${VALID_THINKING_DEFAULTS.join(", ")} (auto-fix removes the invalid value so the gateway uses its default)`,
         autoFixable: true,
+        // We can't know the intended level, so the safe auto-fix removes the
+        // crashing key rather than inventing one. User can set a valid level after.
+        apply: [
+          { target: "config", op: "delete", path: "agents.defaults.thinkingDefault" },
+        ],
       });
     } else {
       results.push({
@@ -119,20 +132,44 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
     }
   }
 
-  // Check for legacy model aliases
-  const allModels = [defaults.model.primary, ...fallbacks];
-  for (const model of allModels) {
-    const alias = MODEL_ALIASES[model];
-    if (alias) {
-      results.push({
-        category: "Model Config",
-        check: `Model alias: ${model}`,
-        status: "warn",
-        message: `"${model}" is a legacy alias — ${alias.reason}`,
-        fix: `Replace with "${alias.canonical}"`,
-        autoFixable: true,
-      });
-    }
+  // Check for legacy model aliases. The primary is a scalar (set); fallbacks are
+  // edited by value (arrayReplace) so the fix stays correct even if another fix
+  // (e.g. fallback-duplication removal) reshapes the array first.
+  const aliasFinding = (model: string, apply: FixOperation[]): AuditResult => ({
+    category: "Model Config",
+    check: `Model alias: ${model}`,
+    status: "warn",
+    message: `"${model}" is a legacy alias — ${MODEL_ALIASES[model].reason}`,
+    fix: `Replace with "${MODEL_ALIASES[model].canonical}"`,
+    autoFixable: true,
+    apply,
+  });
+
+  if (MODEL_ALIASES[defaults.model.primary]) {
+    results.push(
+      aliasFinding(defaults.model.primary, [
+        {
+          target: "config",
+          op: "set",
+          path: "agents.defaults.model.primary",
+          value: MODEL_ALIASES[defaults.model.primary].canonical,
+        },
+      ])
+    );
+  }
+  // De-dupe alias values so we emit one arrayReplace per distinct legacy alias.
+  for (const alias of [...new Set(fallbacks.filter((fb) => MODEL_ALIASES[fb]))]) {
+    results.push(
+      aliasFinding(alias, [
+        {
+          target: "config",
+          op: "arrayReplace",
+          path: "agents.defaults.model.fallbacks",
+          match: alias,
+          value: MODEL_ALIASES[alias].canonical,
+        },
+      ])
+    );
   }
 
   // Check thinkingDefault compatibility with primary model
