@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-393-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-415-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw.** 28 auditor modules, 390+ tests, 25 optimize dimensions. Current to OpenClaw v2026.6.
+**Multi-system: Claude Code + OpenClaw.** 28 auditor modules, 410+ tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.6.
 
 ## Install
 
@@ -70,12 +70,13 @@ agent-optimizer buy --tier solo                    # Pre-select Solo tier
 
 ```bash
 agent-optimizer audit --fix                        # Auto-apply safe fixes
+agent-optimizer audit --fix --dry-run              # Preview the fixes first
 agent-optimizer optimize                           # Apply balanced optimizations
 agent-optimizer optimize --profile aggressive      # Maximum token savings
 agent-optimizer optimize --only heartbeat          # Fix only heartbeat
 agent-optimizer optimize --only context,pruning    # Fix specific areas
 agent-optimizer optimize --skip subagents          # Fix everything except subagents
-agent-optimizer rollback                           # Restore pre-optimize backup
+agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer activate AO-XXXX-XXXXXXXX-XXXXXXXX # Activate license
 agent-optimizer deactivate                         # Remove license
 ```
@@ -144,6 +145,20 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Settings Hooks** | Unknown event names, hook count per event, missing/excessive timeouts, invalid matcher regex, empty hook blocks |
 | **MCP Servers** | Server count, missing `type`/`command`/`url`, unknown server types, empty env blocks |
 | **Memory Files** | CLAUDE.md size budget (user + project scope), drift between scopes, broken `@-imports` |
+
+## Auto-Fix (`audit --fix`)
+
+`audit --fix` applies the safe, unambiguous fixes the audit finds (licensed). Preview first with `--fix --dry-run`. Every touched file is backed up to `<file>.pre-fix.bak` before any write, writes are atomic (temp + rename, never a truncated config), and `agent-optimizer rollback` restores both `openclaw.json` and `models.json`.
+
+Currently auto-applied:
+
+- Remove the primary model duplicated in its own `fallbacks`
+- Remove an invalid `thinkingDefault` (the value that would crash the gateway)
+- Canonicalise legacy model aliases (primary and fallbacks)
+- Remove tool groups listed in both `alsoAllow` and `deny`
+- Strip the legacy `openai-codex` transport override from `models.json`
+
+Findings that need human judgement (e.g. picking a model, choosing a thinking level) are shown with fix instructions but never auto-applied. Claude Code settings stay preview-only — `settings.json` edits are surfaced as recommendations, not written.
 
 ## Optimize Profiles
 
