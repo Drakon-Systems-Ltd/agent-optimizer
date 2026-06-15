@@ -27,7 +27,6 @@ const STATUS_SYMBOL: Record<string, string> = {
 // How many fix instructions to show for free
 const FREE_FIX_LIMIT = 3;
 
-
 // ── Health score ────────────────────────────────────────────────────
 function calculateHealthScore(report: AuditReport): number {
   const { pass, warn, fail, total } = report.summary;
@@ -122,7 +121,7 @@ export function generateReport(
   if (warn > 0) parts.push(`${yellow("⚠")} ${warn} warn`);
   if (info > 0) parts.push(`${blue("i")} ${info} info`);
   if (pass > 0) parts.push(`${green("✓")} ${pass} pass`);
-  console.log(`  ${parts.join("   ")}`);
+  if (parts.length > 0) console.log(`  ${parts.join("   ")}`);
 
   // ── Needs attention: fails first, then warns ─────────────────────
   if (fails.length > 0 || warns.length > 0) {
