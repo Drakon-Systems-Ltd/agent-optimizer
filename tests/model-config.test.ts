@@ -131,6 +131,20 @@ describe("auditModelConfig", () => {
     expect(results.some((r) => r.status === "warn" && r.message.includes("legacy alias"))).toBe(true);
   });
 
+  it("fallback-alias fix uses arrayReplace, but arrayRemove when canonical already present", () => {
+    // canonical NOT present → arrayReplace
+    const a = auditModelConfig({
+      agents: { defaults: { model: { primary: "anthropic/x", fallbacks: ["openai-codex/gpt-5.4-codex"] } } },
+    }).find((r) => r.check.includes("alias"));
+    expect(a?.apply?.[0].op).toBe("arrayReplace");
+
+    // canonical ALREADY present → arrayRemove (avoid creating a duplicate)
+    const b = auditModelConfig({
+      agents: { defaults: { model: { primary: "anthropic/x", fallbacks: ["openai-codex/gpt-5.4-codex", "openai-codex/gpt-5.4"] } } },
+    }).find((r) => r.check.includes("alias"));
+    expect(b?.apply?.[0].op).toBe("arrayRemove");
+  });
+
   it("warns when xhigh thinking used with unsupported model", () => {
     const config: OpenClawConfig = {
       agents: {

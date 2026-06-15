@@ -6,6 +6,24 @@ export interface AuditResult {
   fix?: string;
   autoFixable?: boolean;
   system?: SystemKind;
+  // Concrete machine-applicable transformation(s) for `audit --fix`. Present only
+  // on autoFixable findings whose fix is unambiguous. Without this, a finding may
+  // be flagged autoFixable but is left for manual action.
+  apply?: FixOperation[];
+}
+
+// A single deterministic edit applied to a target config file by `audit --fix`.
+// Array edits are value-based (arrayRemove / arrayReplace) rather than positional
+// so they stay correct when multiple fixes touch the same array.
+export interface FixOperation {
+  // Which file the path is rooted in: the openclaw.json passed via -c, or the
+  // models.json resolved from the agent directory.
+  target: "config" | "models";
+  op: "set" | "delete" | "arrayRemove" | "arrayReplace";
+  path: string; // dot-path within the target file; numeric segments index arrays
+  value?: unknown; // for "set" (new value) and "arrayReplace" (replacement item)
+  remove?: unknown[]; // for "arrayRemove" (items to drop from the array at path)
+  match?: unknown; // for "arrayReplace" (array items equal to this become `value`)
 }
 
 export interface AuditReport {

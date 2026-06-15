@@ -1,4 +1,4 @@
-import type { AuditResult, OpenClawConfig } from "../../types.js";
+import type { AuditResult, OpenClawConfig, FixOperation } from "../../types.js";
 import { loadModelsJson } from "../../utils/config.js";
 
 export function auditLegacyOverrides(
@@ -32,6 +32,13 @@ export function auditLegacyOverrides(
     const hasLegacyBase = codex.baseUrl === "https://api.openai.com/v1";
 
     if (hasLegacyApi || hasLegacyBase) {
+      const apply: FixOperation[] = [];
+      if (hasLegacyApi) {
+        apply.push({ target: "models", op: "delete", path: "providers.openai-codex.api" });
+      }
+      if (hasLegacyBase) {
+        apply.push({ target: "models", op: "delete", path: "providers.openai-codex.baseUrl" });
+      }
       results.push({
         category: "Legacy Overrides",
         check: "Codex transport override",
@@ -40,6 +47,7 @@ export function auditLegacyOverrides(
           'Legacy openai-codex transport override detected (api/baseUrl) — shadows built-in Codex OAuth path',
         fix: 'Remove "api" and "baseUrl" from openai-codex in models.json',
         autoFixable: true,
+        apply,
       });
     } else {
       results.push({
