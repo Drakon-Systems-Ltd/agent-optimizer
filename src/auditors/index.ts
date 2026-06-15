@@ -7,7 +7,9 @@ import { runOpenClawAuditors } from "./openclaw/index.js";
 import { runClaudeCodeAuditors } from "./claude-code/index.js";
 
 export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): Promise<AuditReport> {
-  const showProgress = !opts.json && !opts.silent;
+  // Only animate spinners on an interactive TTY — piped/redirected output
+  // otherwise leaves stray spinner frames (e.g. "- Detecting...") in the log.
+  const showProgress = !opts.json && !opts.silent && !!process.stdout.isTTY;
 
   const detected = detectSystems();
   const openclawSystem = detected.find((s) => s.kind === "openclaw") ?? null;

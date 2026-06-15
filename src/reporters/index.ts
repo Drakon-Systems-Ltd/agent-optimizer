@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { createRequire } from "module";
 import type { AuditReport, AuditResult } from "../types.js";
 import { loadMonitorState } from "../monitor/state.js";
+import { termWidth, wrap } from "../utils/format.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json");
@@ -15,16 +16,17 @@ const blue = chalk.blue;
 const dim = chalk.dim;
 const white = chalk.bold.white;
 
-// Status blocks — visual weight instead of tiny icons
-const STATUS_BLOCK: Record<string, string> = {
-  pass: green("██"),
-  warn: yellow("▓▓"),
-  fail: red("░░"),
-  info: blue("▪▪"),
+// Status marks — shape-distinct so they read without colour (colourblind-safe).
+const STATUS_SYMBOL: Record<string, string> = {
+  pass: green("✓"),
+  warn: yellow("⚠"),
+  fail: red("✗"),
+  info: blue("i"),
 };
 
 // How many fix instructions to show for free
 const FREE_FIX_LIMIT = 3;
+
 
 // ── Health score ────────────────────────────────────────────────────
 function calculateHealthScore(report: AuditReport): number {
@@ -78,61 +80,75 @@ export function generateReport(
   }
 
   const licensed = opts.licensed ?? false;
+  const width = termWidth();
+  const rule = "─".repeat(Math.min(48, width - 2));
 
-  // Group by category
-  const categories = new Map<string, AuditResult[]>();
-  for (const result of report.results) {
-    if (!categories.has(result.category)) {
-      categories.set(result.category, []);
-    }
-    categories.get(result.category)!.push(result);
-  }
+  const fails = report.results.filter((r) => r.status === "fail");
+  const warns = report.results.filter((r) => r.status === "warn");
+  const infos = report.results.filter((r) => r.status === "info");
+  const passes = report.results.filter((r) => r.status === "pass");
 
-  // Track fix display for gating
+  // Fix-gating state (free users see the first N fix instructions).
   let fixesShown = 0;
   let fixesGated = 0;
 
-  // Print each category
-  for (const [category, results] of categories) {
-    const label = `  ${redBold("▸")} ${white(category)} `;
-    const lineLen = Math.max(0, 48 - category.length);
-    console.log(`\n${label}${dim("─".repeat(lineLen))}`);
-
-    for (const r of results) {
-      const block = STATUS_BLOCK[r.status] ?? "??";
-      const msg = r.message.length > 80 ? r.message.slice(0, 78) + "…" : r.message;
-      console.log(`  ${block} ${dim(r.check + ":")} ${statusColour(r.status, msg)}`);
-
-      // Fix instruction gating
-      if (r.fix && (r.status === "fail" || r.status === "warn")) {
-        if (licensed || fixesShown < FREE_FIX_LIMIT) {
-          console.log(`     ${red("→")} ${dim(r.fix)}`);
-          fixesShown++;
-        } else {
-          console.log(`     ${red("→")} ${dim("██████████████████████████████")}`);
-          fixesGated++;
-        }
+  // Render one fail/warn finding: header line, wrapped message, gated fix.
+  const renderFinding = (r: AuditResult, colour: (s: string) => string): void => {
+    const sym = STATUS_SYMBOL[r.status] ?? "?";
+    console.log(`  ${sym} ${white(r.category)} ${dim("·")} ${dim(r.check)}`);
+    for (const line of wrap(r.message, width - 4)) console.log("    " + colour(line));
+    if (r.fix && (r.status === "fail" || r.status === "warn")) {
+      if (licensed || fixesShown < FREE_FIX_LIMIT) {
+        const fixLines = wrap(r.fix, width - 6);
+        console.log("    " + red("→ " + fixLines[0]));
+        for (const line of fixLines.slice(1)) console.log("      " + red(line));
+        fixesShown++;
+      } else {
+        console.log("    " + dim("→ fix hidden — unlock with a license"));
+        fixesGated++;
       }
     }
-  }
+  };
 
-  // ── Summary bar ──────────────────────────────────────────────────
+  // ── Health bar ───────────────────────────────────────────────────
   const score = calculateHealthScore(report);
-
-  console.log(`\n  ${dim("━".repeat(48))}`);
-  console.log(`  ${dim("HEALTH")}  ${renderHealthBar(score)} ${scoreColour(score)(`${score}/100`)}`);
-  console.log(`  ${dim("━".repeat(48))}`);
-
   const { pass, warn, fail, total } = report.summary;
   const info = total - pass - warn - fail;
 
-  const parts: string[] = [];
-  if (pass > 0) parts.push(`${green("██")} ${pass} pass`);
-  if (warn > 0) parts.push(`${yellow("▓▓")} ${warn} warn`);
-  if (fail > 0) parts.push(`${red("░░")} ${fail} fail`);
-  if (info > 0) parts.push(`${blue("▪▪")} ${info} info`);
+  console.log(`\n  ${dim("Health")}  ${renderHealthBar(score)}  ${scoreColour(score)(`${score}/100`)}`);
 
+  const parts: string[] = [];
+  if (fail > 0) parts.push(`${red("✗")} ${fail} fail`);
+  if (warn > 0) parts.push(`${yellow("⚠")} ${warn} warn`);
+  if (info > 0) parts.push(`${blue("i")} ${info} info`);
+  if (pass > 0) parts.push(`${green("✓")} ${pass} pass`);
   console.log(`  ${parts.join("   ")}`);
+
+  // ── Needs attention: fails first, then warns ─────────────────────
+  if (fails.length > 0 || warns.length > 0) {
+    console.log(`\n  ${redBold("NEEDS ATTENTION")} ${dim(rule.slice(16))}`);
+    for (const r of fails) renderFinding(r, red);
+    for (const r of warns) renderFinding(r, yellow);
+  }
+
+  // ── Notes (info) — compact, one wrapped entry each ───────────────
+  if (infos.length > 0) {
+    console.log(`\n  ${blue("NOTES")} ${dim(rule.slice(6))}`);
+    for (const r of infos) {
+      const lines = wrap(`${r.category} · ${r.message}`, width - 4);
+      console.log(`  ${blue("i")} ${dim(lines[0])}`);
+      for (const line of lines.slice(1)) console.log("    " + dim(line));
+    }
+  }
+
+  // ── Passed — condensed single list of check names ────────────────
+  if (passes.length > 0) {
+    console.log(`\n  ${green("✓")} ${dim(`${passes.length} passed:`)}`);
+    const names = passes.map((r) => r.check).join("  ·  ");
+    for (const line of wrap(names, width - 4)) console.log("    " + dim(line));
+  }
+
+  console.log(`\n  ${dim(rule)}`);
 
   // Version info
   if (report.openclawVersion && report.openclawVersion !== "unknown") {
@@ -207,10 +223,11 @@ function scoreColour(score: number): (s: string) => string {
 // ── Scan reporter ───────────────────────────────────────────────────
 export function printScanResults(results: AuditResult[]): void {
   if (results.length === 0) {
-    console.log(green("  ██ No suspicious patterns found\n"));
+    console.log(`  ${green("✓")} ${green("No suspicious patterns found")}\n`);
     return;
   }
 
+  const width = termWidth();
   const categories = new Map<string, AuditResult[]>();
   for (const r of results) {
     if (!categories.has(r.category)) categories.set(r.category, []);
@@ -218,13 +235,14 @@ export function printScanResults(results: AuditResult[]): void {
   }
 
   for (const [category, catResults] of categories) {
-    const label = `  ${redBold("▸")} ${white(category)} `;
-    const lineLen = Math.max(0, 48 - category.length);
-    console.log(`\n${label}${dim("─".repeat(lineLen))}`);
+    const lineLen = Math.max(0, Math.min(48, width - 2) - category.length - 4);
+    console.log(`\n  ${redBold("▸")} ${white(category)} ${dim("─".repeat(lineLen))}`);
 
     for (const r of catResults) {
-      const block = STATUS_BLOCK[r.status] ?? "??";
-      console.log(`  ${block} ${statusColour(r.status, r.message)}`);
+      const sym = STATUS_SYMBOL[r.status] ?? "?";
+      const lines = wrap(r.message, width - 4);
+      console.log(`  ${sym} ${statusColour(r.status, lines[0])}`);
+      for (const line of lines.slice(1)) console.log("    " + statusColour(r.status, line));
     }
   }
   console.log();

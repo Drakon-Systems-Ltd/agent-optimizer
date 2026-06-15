@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import type { OptimizeOptions, OpenClawConfig } from "../../types.js";
 import { loadConfig, expandPath } from "../../utils/config.js";
+import { termWidth, wrap } from "../../utils/format.js";
 import { writeFileSync, copyFileSync } from "fs";
 import type { Optimization } from "../index.js";
 
@@ -502,21 +503,28 @@ export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> 
     return;
   }
 
+  const width = termWidth();
   console.log(
-    chalk.bold(`Found ${optimizations.length} optimization(s) (profile: ${opts.profile}):\n`)
+    chalk.bold(`\n  Found ${optimizations.length} optimization(s) `) +
+      chalk.dim(`(profile: ${opts.profile})`)
   );
 
   for (const opt of optimizations) {
-    const prefix = opt.info ? chalk.cyan("info:") + " " : "";
-    console.log(`  ${chalk.yellow("→")} ${prefix}[${chalk.dim(opt.tag)}] ${opt.reason}`);
+    const tag = opt.info ? chalk.cyan(`${opt.tag} (info)`) : chalk.bold.white(opt.tag);
+    console.log(`\n  ${chalk.yellow("→")} ${tag}`);
+    for (const line of wrap(opt.reason, width - 4)) console.log("    " + line);
     console.log(
-      `    ${chalk.dim(`${opt.path}: ${JSON.stringify(opt.current)} → ${JSON.stringify(opt.recommended)}`)}`
+      "    " +
+        chalk.dim(`${opt.path}: ${JSON.stringify(opt.current)} → ${JSON.stringify(opt.recommended)}`)
     );
   }
 
   if (opts.dryRun) {
-    console.log(chalk.dim("\n--dry-run: no changes applied"));
-    console.log(chalk.dim(`Available tags for --only/--skip: ${OPTIMIZATION_TAGS.join(", ")}`));
+    console.log(chalk.dim("\n  --dry-run: no changes applied"));
+    console.log(chalk.dim("\n  Available tags for --only / --skip:"));
+    for (const line of wrap(OPTIMIZATION_TAGS.join(", "), width - 4)) {
+      console.log("    " + chalk.dim(line));
+    }
     return;
   }
 
