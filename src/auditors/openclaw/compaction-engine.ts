@@ -42,8 +42,11 @@ export function auditCompactionEngine(config: OpenClawConfig): AuditResult[] {
     }
   }
 
-  const list = config.agents?.list ?? [];
+  // Defensive: loadConfig() does a raw JSON.parse with no schema validation, so
+  // a hand-edited config may have a non-array list or null/non-object elements.
+  const list = Array.isArray(config.agents?.list) ? config.agents.list : [];
   for (const rawEntry of list) {
+    if (!rawEntry || typeof rawEntry !== "object") continue;
     const entry = rawEntry as Record<string, any>;
     const provider = entry.compaction?.provider;
     if (provider === LOSSLESS_CLAW) {

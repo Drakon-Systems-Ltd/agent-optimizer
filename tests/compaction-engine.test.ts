@@ -92,4 +92,20 @@ describe("auditCompactionEngine", () => {
     } as unknown as OpenClawConfig;
     expect(auditCompactionEngine(config)).toHaveLength(0);
   });
+
+  it("does not crash on null or non-object list elements", () => {
+    const config = {
+      agents: { list: [null, undefined, "just-a-string", 42] },
+    } as unknown as OpenClawConfig;
+    expect(() => auditCompactionEngine(config)).not.toThrow();
+    expect(auditCompactionEngine(config)).toHaveLength(0);
+  });
+
+  it("does not crash when agents.list is not an array", () => {
+    const config = {
+      agents: { list: { foo: "bar" } },
+    } as unknown as OpenClawConfig;
+    expect(() => auditCompactionEngine(config)).not.toThrow();
+    expect(auditCompactionEngine(config)).toHaveLength(0);
+  });
 });

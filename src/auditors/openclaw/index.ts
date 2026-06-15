@@ -80,7 +80,19 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
     if (spinner) {
       spinner.text = chalk.dim(`Scanning ${auditor.name}... (${i + 1}/${auditors.length})`);
     }
-    results.push(...auditor.run().map((r) => ({ ...r, system: "openclaw" as const })));
+    // Isolate each auditor: a throw on malformed config must not abort the whole
+    // run (auditing broken configs is the point). Surface the failure as a result.
+    try {
+      results.push(...auditor.run().map((r) => ({ ...r, system: "openclaw" as const })));
+    } catch (err) {
+      results.push({
+        category: auditor.name,
+        check: `${auditor.name} auditor`,
+        status: "warn",
+        message: `Auditor "${auditor.name}" errored on this config and was skipped: ${(err as Error).message}`,
+        system: "openclaw" as const,
+      });
+    }
   }
 
   if (spinner) {

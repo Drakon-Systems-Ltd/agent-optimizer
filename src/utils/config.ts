@@ -29,17 +29,19 @@ export function loadModelsJson(agentDir: string): Record<string, unknown> | null
 }
 
 export function findAgentDir(config: OpenClawConfig): string {
-  const list = config.agents?.list;
-  if (list && list.length > 0 && list[0].agentDir) {
-    return list[0].agentDir;
+  // Defensive: config is raw-parsed with no validation, so list[0] may be
+  // null / a non-object from a hand-edited file.
+  const first = Array.isArray(config.agents?.list) ? config.agents.list[0] : undefined;
+  if (first && typeof first === "object" && first.agentDir) {
+    return first.agentDir;
   }
   return "~/.openclaw/agents/main/agent";
 }
 
 export function findWorkspace(config: OpenClawConfig): string {
-  const list = config.agents?.list;
-  if (list && list.length > 0 && list[0].workspace) {
-    return list[0].workspace;
+  const first = Array.isArray(config.agents?.list) ? config.agents.list[0] : undefined;
+  if (first && typeof first === "object" && first.workspace) {
+    return first.workspace;
   }
   return config.agents?.defaults?.workspace ?? "~/.openclaw/workspace";
 }

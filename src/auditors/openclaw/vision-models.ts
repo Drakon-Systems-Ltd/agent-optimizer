@@ -2,8 +2,30 @@ import type { AuditResult, OpenClawConfig, MediaModelRef } from "../../types.js"
 
 const CATEGORY = "Vision Models";
 
+// OpenClaw splits a model ref on the FIRST "/". A valid ref needs a non-empty
+// provider AND a non-empty model half — "/model" and "provider/" are both broken.
 function isValidRef(ref: string): boolean {
-  return ref.includes("/");
+  const i = ref.indexOf("/");
+  return i > 0 && i < ref.length - 1;
+}
+
+function isStringRef(v: unknown): v is string {
+  return typeof v === "string";
+}
+
+function malformedRef(label: string, value: unknown): AuditResult {
+  const shown = typeof value === "string" ? `"${value}"` : JSON.stringify(value);
+  const reason =
+    typeof value === "string"
+      ? 'lacks provider/model form — OpenClaw splits on the first "/" and will silently ignore this ref'
+      : 'is not a string — model refs must be "provider/model" strings';
+  return {
+    category: CATEGORY,
+    check: "imageModel ref",
+    status: "warn",
+    message: `${label} ${shown} ${reason}.`,
+    fix: 'Use "provider/model" form, e.g. "openai/gpt-4.1-mini"',
+  };
 }
 
 export function auditVisionModels(config: OpenClawConfig): AuditResult[] {
@@ -29,25 +51,17 @@ export function auditVisionModels(config: OpenClawConfig): AuditResult[] {
       });
     }
   } else if (imageModel && typeof imageModel === "object") {
-    if (typeof imageModel.primary === "string" && !isValidRef(imageModel.primary)) {
-      results.push({
-        category: CATEGORY,
-        check: "imageModel ref",
-        status: "warn",
-        message: `imageModel.primary "${imageModel.primary}" lacks provider/model form — OpenClaw splits on the first "/" and will silently ignore this ref.`,
-        fix: 'Use "provider/model" form, e.g. "openai/gpt-4.1-mini"',
-      });
+    if (imageModel.primary !== undefined && !isStringRef(imageModel.primary)) {
+      results.push(malformedRef("imageModel.primary", imageModel.primary));
+    } else if (typeof imageModel.primary === "string" && !isValidRef(imageModel.primary)) {
+      results.push(malformedRef("imageModel.primary", imageModel.primary));
     }
     if (Array.isArray(imageModel.fallbacks)) {
       for (const fallback of imageModel.fallbacks) {
-        if (typeof fallback === "string" && !isValidRef(fallback)) {
-          results.push({
-            category: CATEGORY,
-            check: "imageModel ref",
-            status: "warn",
-            message: `imageModel fallback "${fallback}" lacks provider/model form — OpenClaw splits on the first "/" and will silently ignore this ref.`,
-            fix: 'Use "provider/model" form, e.g. "openai/gpt-4.1-mini"',
-          });
+        if (fallback !== undefined && !isStringRef(fallback)) {
+          results.push(malformedRef("imageModel fallback", fallback));
+        } else if (typeof fallback === "string" && !isValidRef(fallback)) {
+          results.push(malformedRef("imageModel fallback", fallback));
         }
       }
     }
@@ -59,7 +73,7 @@ export function auditVisionModels(config: OpenClawConfig): AuditResult[] {
       const hasProviderModel =
         typeof entry?.provider === "string" && entry.provider.length > 0 &&
         typeof entry?.model === "string" && entry.model.length > 0;
-      const hasSlashModel = typeof entry?.model === "string" && entry.model.includes("/");
+      const hasSlashModel = typeof entry?.model === "string" && isValidRef(entry.model);
       if (!hasProviderModel && !hasSlashModel) {
         results.push({
           category: CATEGORY,

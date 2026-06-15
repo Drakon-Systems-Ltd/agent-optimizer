@@ -83,4 +83,36 @@ describe("auditVisionModels", () => {
     };
     expect(auditVisionModels(config)).toHaveLength(0);
   });
+
+  it.each(["/model", "provider/"])("flags a ref with an empty half: %s", (ref) => {
+    const config: OpenClawConfig = {
+      agents: { defaults: { imageModel: ref } },
+    };
+    const results = auditVisionModels(config);
+    expect(results.some(r => r.status === "warn" && r.check === "imageModel ref")).toBe(true);
+  });
+
+  it("flags a non-string imageModel.primary", () => {
+    const config = {
+      agents: { defaults: { imageModel: { primary: 5 } } },
+    } as unknown as OpenClawConfig;
+    const results = auditVisionModels(config);
+    expect(results.some(r => r.status === "warn" && r.check === "imageModel ref")).toBe(true);
+  });
+
+  it("flags a non-string fallback entry", () => {
+    const config = {
+      agents: { defaults: { imageModel: { primary: "openai/x", fallbacks: ["openai/y", 7] } } },
+    } as unknown as OpenClawConfig;
+    const results = auditVisionModels(config);
+    expect(results.some(r => r.status === "warn" && r.check === "imageModel ref")).toBe(true);
+  });
+
+  it("flags a tools.media.image.models entry with an empty-half model ref", () => {
+    const config: OpenClawConfig = {
+      tools: { media: { image: { models: [{ model: "provider/" }] } } },
+    };
+    const results = auditVisionModels(config);
+    expect(results.some(r => r.status === "warn" && r.check === "image model entry")).toBe(true);
+  });
 });
