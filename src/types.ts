@@ -31,6 +31,12 @@ export interface OpenClawConfig {
     allow?: string[];
     entries?: Record<string, { enabled?: boolean; config?: Record<string, unknown> }>;
     installs?: Record<string, PluginInstall>;
+    // Context-engine / memory plugin slots (v2026.5+). lossless-claw compaction
+    // migrates here from agents.defaults.compaction.provider.
+    slots?: {
+      memory?: string;
+      contextEngine?: string;
+    };
   };
   hooks?: {
     internal?: {
@@ -63,6 +69,14 @@ export interface OpenClawConfig {
       allow?: string[];
       deny?: string[];
     }>;
+    // Media-understanding model overrides (v2026.5+). Per-kind entries take
+    // precedence over shared tools.media.models.
+    media?: {
+      models?: MediaModelRef[];
+      image?: { enabled?: boolean; models?: MediaModelRef[] };
+      audio?: { enabled?: boolean; models?: MediaModelRef[] };
+      video?: { enabled?: boolean; models?: MediaModelRef[] };
+    };
   };
   [key: string]: unknown;
 }
@@ -83,6 +97,9 @@ export interface AgentDefaults {
   compaction?: {
     mode?: string;
     model?: string;
+    // Legacy context-engine selector (e.g. "lossless-claw"); deprecated in
+    // favour of plugins.slots.contextEngine. Free-form string, still parses.
+    provider?: string;
     reserveTokensFloor?: number;
     maxHistoryShare?: number;
     identifierPolicy?: string;
@@ -106,6 +123,32 @@ export interface AgentDefaults {
   imageMaxDimensionPx?: number;
   bootstrapMaxChars?: number;
   bootstrapTotalMaxChars?: number;
+  // Vision model for image understanding (v2026.5+). When unset, falls back to
+  // the active/primary model — only used when the primary can't accept images.
+  imageModel?: AgentModelRef;
+  // Embedded-runner retry ceiling (v2026.5+). Object, NOT a scalar. Zod-strict
+  // with cross-field max>=min. Applies to the embedded runtime only (not ACP/CLI).
+  runRetries?: {
+    base?: number;
+    perProfile?: number;
+    min?: number;
+    max?: number;
+  };
+}
+
+// A model reference: bare "provider/model" string, or an object form.
+export type AgentModelRef =
+  | string
+  | { primary?: string; fallbacks?: string[]; timeoutMs?: number };
+
+// A media-understanding model entry (tools.media.*.models[]). Loosely typed —
+// OpenClaw's schema is strict but we only read provider/model for validation.
+export interface MediaModelRef {
+  provider?: string;
+  model?: string;
+  capabilities?: unknown;
+  type?: string;
+  [key: string]: unknown;
 }
 
 export interface AgentEntry {
