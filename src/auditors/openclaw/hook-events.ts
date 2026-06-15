@@ -12,6 +12,10 @@ const KNOWN_EVENTS = new Set([
   "before_model_resolve", "before_prompt_build",
   // Deprecated but still handled
   "before_agent_start",
+  // v2026.6 additions
+  "session:patch", "gateway:shutdown", "gateway:pre-restart",
+  // bare event types (catch-all subscriptions): InternalHookEventType union
+  "command", "session", "agent", "gateway", "message",
 ]);
 
 export function auditHookEvents(config: OpenClawConfig): AuditResult[] {

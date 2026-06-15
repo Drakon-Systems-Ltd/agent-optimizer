@@ -37,6 +37,26 @@ describe("auditHookEvents", () => {
     }
   });
 
+  it.each([
+    "command",
+    "session:patch",
+    "gateway:shutdown",
+    "gateway:pre-restart",
+  ])("does not flag v2026.6 event %s as unknown", (event) => {
+    const config: OpenClawConfig = {
+      hooks: { internal: { entries: { h: { event } } } },
+    };
+    expect(auditHookEvents(config).every(r => r.status !== "fail")).toBe(true);
+  });
+
+  it("still flags a genuine typo of a v2026.6 event", () => {
+    const config: OpenClawConfig = {
+      hooks: { internal: { entries: { h: { event: "gateway:shutdwn" } } } },
+    };
+    const results = auditHookEvents(config);
+    expect(results.some(r => r.status === "fail" && r.message.includes("Unknown hook event"))).toBe(true);
+  });
+
   it("ignores entries with no event field", () => {
     const config: OpenClawConfig = {
       hooks: { internal: { entries: { h: { enabled: true } } } },
