@@ -353,11 +353,167 @@ describe("getOptimizations — tools-profile", () => {
   });
 });
 
+describe("getOptimizations — runRetries-cap (info-only)", () => {
+  it("fires when max=160 on aggressive (recommended.max===50, preserves other keys, info)", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: {
+          runRetries: { base: 24, perProfile: 8, min: 32, max: 160 } as never,
+        },
+      },
+    };
+    const cap = getOptimizations(config, "aggressive").find(
+      (o) => o.tag === "runRetries-cap"
+    );
+    expect(cap).toBeDefined();
+    expect(cap?.info).toBe(true);
+    expect(cap?.current).toBe(160);
+    const rec = cap?.recommended as Record<string, number>;
+    expect(rec.max).toBe(50);
+    // preserves existing sub-keys
+    expect(rec.base).toBe(24);
+    expect(rec.perProfile).toBe(8);
+    expect(rec.min).toBe(32);
+  });
+
+  it("preserves a custom min so max>=min (min=60 -> safeMax=60 not 50)", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        defaults: { runRetries: { min: 60, max: 160 } as never },
+      },
+    };
+    const cap = getOptimizations(config, "aggressive").find(
+      (o) => o.tag === "runRetries-cap"
+    );
+    expect(cap).toBeDefined();
+    const rec = cap?.recommended as Record<string, number>;
+    expect(rec.max).toBe(60);
+    expect(rec.min).toBe(60);
+  });
+
+  it("no-op when max already <= target (balanced target=96, max=90)", () => {
+    const config: OpenClawConfig = {
+      agents: { defaults: { runRetries: { max: 90 } as never } },
+    };
+    expect(
+      getOptimizations(config, "balanced").find((o) => o.tag === "runRetries-cap")
+    ).toBeUndefined();
+  });
+
+  it("no-op when unset on minimal (default 160 === target 160)", () => {
+    const config: OpenClawConfig = { agents: { defaults: {} } };
+    expect(
+      getOptimizations(config, "minimal").find((o) => o.tag === "runRetries-cap")
+    ).toBeUndefined();
+  });
+
+  it("no-op when safeMax cannot drop below current (min>=current already)", () => {
+    const config: OpenClawConfig = {
+      agents: { defaults: { runRetries: { min: 200, max: 160 } as never } },
+    };
+    // existingMin=200, safeMax=max(50,200)=200, 200 !< 160 → skip
+    expect(
+      getOptimizations(config, "aggressive").find((o) => o.tag === "runRetries-cap")
+    ).toBeUndefined();
+  });
+});
+
+describe("getOptimizations — discord-suppress-embeds (info-only)", () => {
+  it("fires only when suppressEmbeds===false on balanced/aggressive (info)", () => {
+    const config: OpenClawConfig = {
+      channels: { discord: { suppressEmbeds: false } as never },
+    };
+    const balanced = getOptimizations(config, "balanced").find(
+      (o) => o.tag === "discord-suppress-embeds"
+    );
+    expect(balanced).toBeDefined();
+    expect(balanced?.info).toBe(true);
+    expect(balanced?.current).toBe(false);
+    expect(balanced?.recommended).toBe(true);
+    expect(
+      getOptimizations(config, "aggressive").find(
+        (o) => o.tag === "discord-suppress-embeds"
+      )
+    ).toBeDefined();
+  });
+
+  it("no-op when suppressEmbeds true or unset", () => {
+    const trueCfg: OpenClawConfig = {
+      channels: { discord: { suppressEmbeds: true } as never },
+    };
+    const unsetCfg: OpenClawConfig = { channels: { discord: {} } };
+    expect(
+      getOptimizations(trueCfg, "balanced").find(
+        (o) => o.tag === "discord-suppress-embeds"
+      )
+    ).toBeUndefined();
+    expect(
+      getOptimizations(unsetCfg, "balanced").find(
+        (o) => o.tag === "discord-suppress-embeds"
+      )
+    ).toBeUndefined();
+  });
+
+  it("no-op on minimal even when suppressEmbeds===false", () => {
+    const config: OpenClawConfig = {
+      channels: { discord: { suppressEmbeds: false } as never },
+    };
+    expect(
+      getOptimizations(config, "minimal").find(
+        (o) => o.tag === "discord-suppress-embeds"
+      )
+    ).toBeUndefined();
+  });
+});
+
+describe("getOptimizations — slack-unfurl-links (info-only)", () => {
+  it("fires only when unfurlLinks===true on balanced/aggressive (info)", () => {
+    const config: OpenClawConfig = {
+      channels: { slack: { unfurlLinks: true } as never },
+    };
+    const aggressive = getOptimizations(config, "aggressive").find(
+      (o) => o.tag === "slack-unfurl-links"
+    );
+    expect(aggressive).toBeDefined();
+    expect(aggressive?.info).toBe(true);
+    expect(aggressive?.current).toBe(true);
+    expect(aggressive?.recommended).toBe(false);
+    expect(
+      getOptimizations(config, "balanced").find((o) => o.tag === "slack-unfurl-links")
+    ).toBeDefined();
+  });
+
+  it("no-op when unfurlLinks false or unset", () => {
+    const falseCfg: OpenClawConfig = {
+      channels: { slack: { unfurlLinks: false } as never },
+    };
+    const unsetCfg: OpenClawConfig = { channels: { slack: {} } };
+    expect(
+      getOptimizations(falseCfg, "balanced").find((o) => o.tag === "slack-unfurl-links")
+    ).toBeUndefined();
+    expect(
+      getOptimizations(unsetCfg, "balanced").find((o) => o.tag === "slack-unfurl-links")
+    ).toBeUndefined();
+  });
+
+  it("no-op on minimal even when unfurlLinks===true", () => {
+    const config: OpenClawConfig = {
+      channels: { slack: { unfurlLinks: true } as never },
+    };
+    expect(
+      getOptimizations(config, "minimal").find((o) => o.tag === "slack-unfurl-links")
+    ).toBeUndefined();
+  });
+});
+
 describe("OPTIMIZATION_TAGS", () => {
-  it("includes all 17 dimensions", () => {
-    expect(OPTIMIZATION_TAGS.length).toBe(17);
+  it("includes all 20 dimensions", () => {
+    expect(OPTIMIZATION_TAGS.length).toBe(20);
     expect(OPTIMIZATION_TAGS).toContain("context");
     expect(OPTIMIZATION_TAGS).toContain("tools-profile");
     expect(OPTIMIZATION_TAGS).toContain("fallback-chain");
+    expect(OPTIMIZATION_TAGS).toContain("runRetries-cap");
+    expect(OPTIMIZATION_TAGS).toContain("discord-suppress-embeds");
+    expect(OPTIMIZATION_TAGS).toContain("slack-unfurl-links");
   });
 });

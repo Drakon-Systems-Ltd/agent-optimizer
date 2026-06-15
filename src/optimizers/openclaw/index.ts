@@ -22,6 +22,9 @@ export const OPTIMIZATION_TAGS = [
   "discord-idle-hours",
   "channel-model-routing",
   "tools-profile",
+  "runRetries-cap",
+  "discord-suppress-embeds",
+  "slack-unfurl-links",
 ] as const;
 
 export type OptimizationTag = (typeof OPTIMIZATION_TAGS)[number];
@@ -387,6 +390,70 @@ export function getOptimizations(
         current: config.tools?.profile ?? "default",
         recommended: target.toolsProfile,
         reason: `Switch tools profile from "${toolsCur}" to "${target.toolsProfile}"`,
+      });
+    }
+  }
+
+  // runRetries-cap (info-only) — embedded-runtime runaway iteration cap
+  {
+    const targetMaxByProfile: Record<string, number> = {
+      minimal: 160,
+      balanced: 96,
+      aggressive: 50,
+    };
+    const targetMax = targetMaxByProfile[profile] ?? targetMaxByProfile.balanced;
+    const existing = (config.agents?.defaults?.runRetries ?? {}) as {
+      base?: number;
+      perProfile?: number;
+      min?: number;
+      max?: number;
+    };
+    const current = existing.max ?? 160;
+    if (current > targetMax) {
+      const existingMin = existing.min ?? 32;
+      const safeMax = Math.max(targetMax, existingMin);
+      // Only suggest if it actually lowers the cap (can't reduce below min).
+      if (safeMax < current) {
+        opts.push({
+          tag: "runRetries-cap",
+          path: "agents.defaults.runRetries",
+          current,
+          recommended: { ...existing, max: safeMax },
+          reason: `Suggestion: cap runRetries.max at ${safeMax} (was ${current}) — this is the embedded-runtime runaway iteration cap; lowering it bounds worst-case runaway cost. Info-only (preserves min=${existingMin}).`,
+          info: true,
+        });
+      }
+    }
+  }
+
+  // discord-suppress-embeds (info-only, balanced/aggressive) — opted into link previews
+  if (profile === "balanced" || profile === "aggressive") {
+    const channelsRaw = (config.channels ?? {}) as Record<string, any>;
+    const discord = channelsRaw.discord;
+    if (isPlainObject(discord) && discord.suppressEmbeds === false) {
+      opts.push({
+        tag: "discord-suppress-embeds",
+        path: "channels.discord.suppressEmbeds",
+        current: false,
+        recommended: true,
+        reason: "Suggestion: re-enable Discord embed suppression — link previews add rendering/noise; the default (true) suppresses them. Info-only.",
+        info: true,
+      });
+    }
+  }
+
+  // slack-unfurl-links (info-only, balanced/aggressive) — opted into link previews
+  if (profile === "balanced" || profile === "aggressive") {
+    const channelsRaw = (config.channels ?? {}) as Record<string, any>;
+    const slack = channelsRaw.slack;
+    if (isPlainObject(slack) && slack.unfurlLinks === true) {
+      opts.push({
+        tag: "slack-unfurl-links",
+        path: "channels.slack.unfurlLinks",
+        current: true,
+        recommended: false,
+        reason: "Suggestion: disable Slack link unfurling — inline previews add noise; false is the default. Info-only.",
+        info: true,
       });
     }
   }
