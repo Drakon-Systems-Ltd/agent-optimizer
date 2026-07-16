@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { auditSecurityAdvisories } from "../src/auditors/openclaw/security-advisories.js";
+import {
+  auditSecurityAdvisories,
+  ADVISORY_TABLE_CURRENT,
+} from "../src/auditors/openclaw/security-advisories.js";
 
 describe("auditSecurityAdvisories", () => {
   it("returns info when version is unknown", () => {
@@ -10,7 +13,7 @@ describe("auditSecurityAdvisories", () => {
   });
 
   it("returns pass when on latest version", () => {
-    const results = auditSecurityAdvisories("2026.4.24");
+    const results = auditSecurityAdvisories(ADVISORY_TABLE_CURRENT);
     expect(results.some((r) => r.check === "Security advisories" && r.status === "pass")).toBe(true);
   });
 
@@ -88,21 +91,36 @@ describe("auditSecurityAdvisories", () => {
     expect(advisory!.fix).toContain("registerAgentToolResultMiddleware");
   });
 
-  it("nudges to latest stable for pre-4.24", () => {
-    const results = auditSecurityAdvisories("2026.4.23");
-    expect(
-      results.some((r) => r.check === "Behind latest stable" && r.status === "warn")
-    ).toBe(true);
-  });
-
-  it("returns clean once on 2026.4.24", () => {
+  it("flags 2026.5.x–2026.7.1 advisories for a 2026.4.24 install", () => {
     const results = auditSecurityAdvisories("2026.4.24");
     expect(
       results.some((r) => r.check === "registerEmbeddedExtensionFactory removed")
     ).toBe(false);
-    expect(results.some((r) => r.check === "Behind latest stable")).toBe(false);
     expect(
-      results.some((r) => r.check === "Security advisories" && r.status === "pass")
+      results.some((r) => r.check === "Control UI token disclosure" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Gateway auth rate limiting" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "DOMPurify XSS (GHSA-cmwh-pvxp-8882)" && r.status === "fail")
+    ).toBe(true);
+    const summary = results.find((r) => r.check === "Advisory summary");
+    expect(summary?.status).toBe("fail");
+    expect(summary?.message).toContain("2026.7.1");
+  });
+
+  it("flags only 2026.7.1 advisories for a 2026.6.11 install", () => {
+    const results = auditSecurityAdvisories("2026.6.11");
+    expect(results.some((r) => r.check === "SecretRef process exposure" && r.status === "fail")).toBe(true);
+    expect(results.some((r) => r.check === "SQLite WAL safety" && r.status === "fail")).toBe(true);
+    expect(results.some((r) => r.check === "DOMPurify XSS (GHSA-cmwh-pvxp-8882)")).toBe(false);
+  });
+
+  it("notes advisory-data staleness when detected version is newer than the table", () => {
+    const results = auditSecurityAdvisories("2026.8.1");
+    expect(
+      results.some((r) => r.check === "Advisory data currency" && r.status === "info")
     ).toBe(true);
   });
 });
