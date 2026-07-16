@@ -9,7 +9,7 @@ description: >
 license: SEE LICENSE IN LICENSE.md
 metadata:
   author: Drakon Systems
-  version: 0.11.3
+  version: 0.12.0
   category: devtools
   tags:
     - openclaw-audit

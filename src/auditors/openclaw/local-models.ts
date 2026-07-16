@@ -3,15 +3,6 @@ import { parseInterval } from "../../utils/config.js";
 
 const LOCAL_PROVIDERS = ["lm-studio", "ollama"];
 
-// Typical context window sizes for popular local models
-const SMALL_CONTEXT_MODELS: Record<string, number> = {
-  "llama": 8192,
-  "mistral": 32768,
-  "phi": 4096,
-  "gemma": 8192,
-  "qwen": 32768,
-};
-
 function isLocalModel(model: string): boolean {
   const provider = model.split("/")[0];
   return LOCAL_PROVIDERS.includes(provider);

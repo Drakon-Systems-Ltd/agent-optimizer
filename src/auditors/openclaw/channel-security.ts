@@ -3,6 +3,7 @@ import type { AuditResult, OpenClawConfig } from "../../types.js";
 const KNOWN_CHANNELS = [
   "telegram", "whatsapp", "discord", "slack", "signal",
   "msteams", "matrix", "irc", "bluebubbles", "imessage",
+  "mattermost", "googlechat", "qqbot",
 ];
 
 // Channels with mutable user IDs that can't be trusted for allowlists
