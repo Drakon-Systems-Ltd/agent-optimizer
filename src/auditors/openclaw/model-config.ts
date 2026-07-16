@@ -1,7 +1,9 @@
 import type { AuditResult, OpenClawConfig, FixOperation } from "../../types.js";
 
+// Full enum per OpenClaw 2026.7.1 zod-schema.agent-defaults.ts ("max" and
+// "ultra" added since 2026.6).
 const VALID_THINKING_DEFAULTS = [
-  "off", "minimal", "low", "medium", "high", "xhigh", "adaptive",
+  "off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max", "ultra",
 ];
 
 // Models with known aliases that should be canonicalized

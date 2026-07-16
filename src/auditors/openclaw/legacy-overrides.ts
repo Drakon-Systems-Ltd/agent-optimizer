@@ -104,11 +104,17 @@ export function auditLegacyOverrides(
     const models = provider.models as Array<Record<string, unknown>> | undefined;
     if (models) {
       for (const model of models) {
-        if (
-          model.api &&
-          model.api !== "anthropic-messages" &&
-          model.api !== "openai-codex-responses"
-        ) {
+        if (model.api === "openai-codex-responses") {
+          // Removed API id — OpenClaw 2026.7.1 rejects it in favor of
+          // openai-chatgpt-responses (zod-schema.core.ts).
+          results.push({
+            category: "Legacy Overrides",
+            check: `Removed API id: ${providerName}/${model.id}`,
+            status: "fail",
+            message: `Model uses api: "openai-codex-responses" — removed from OpenClaw; the config will fail validation`,
+            fix: `Change to api: "openai-chatgpt-responses"`,
+          });
+        } else if (model.api && model.api !== "anthropic-messages" && model.api !== "openai-chatgpt-responses") {
           results.push({
             category: "Legacy Overrides",
             check: `Model API override: ${providerName}/${model.id}`,

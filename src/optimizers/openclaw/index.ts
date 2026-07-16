@@ -43,7 +43,7 @@ interface ProfileTargets {
   channelMediaMax: number;
   channelTextChunk: number;
   discordIdleHours: number;
-  toolsProfile: "minimal" | "coding" | "default" | "full";
+  toolsProfile: "minimal" | "coding" | "messaging" | "full";
 }
 
 const PROFILES: Record<string, ProfileTargets> = {
@@ -381,14 +381,14 @@ export function getOptimizations(
     }
   }
 
-  // tools-profile
+  // tools-profile — unset means the full toolset in OpenClaw
   {
-    const toolsCur = (config.tools?.profile ?? "default") as string;
+    const toolsCur = (config.tools?.profile ?? "full") as string;
     if (toolsCur !== target.toolsProfile) {
       opts.push({
         tag: "tools-profile",
         path: "tools.profile",
-        current: config.tools?.profile ?? "default",
+        current: config.tools?.profile ?? "full",
         recommended: target.toolsProfile,
         reason: `Switch tools profile from "${toolsCur}" to "${target.toolsProfile}"`,
       });
