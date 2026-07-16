@@ -2,6 +2,13 @@ import { existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 import { loadAuthProfiles, expandPath } from "../../utils/config.js";
+import {
+  LOCAL_PROVIDERS,
+  SUBSCRIPTION_PROVIDERS,
+  KNOWN_API_PROVIDERS,
+  configProviderHasKey,
+  findProvidingPlugin,
+} from "../../utils/providers.js";
 
 // Placeholder credentials shipped in .env.example that must be changed
 const PLACEHOLDER_PATTERNS = [
@@ -21,7 +28,7 @@ export function auditAuthProfiles(
       category: "Auth",
       check: "Auth profiles exist",
       status: "fail",
-      message: `No auth-profiles.json found in ${agentDir}`,
+      message: `No auth profiles found in ${agentDir} (checked openclaw-agent.sqlite store and legacy auth-profiles.json)`,
       fix: "Run: openclaw configure --section model",
     });
     return results;
@@ -110,14 +117,37 @@ export function auditAuthProfiles(
   if (primary) {
     const provider = primary.split("/")[0];
     const hasAuth = entries.some(([, p]) => p.provider === provider);
-    if (!hasAuth && provider !== "ollama" && provider !== "lm-studio") {
-      results.push({
-        category: "Auth",
-        check: `Auth for primary model (${provider})`,
-        status: "fail",
-        message: `No auth profile for provider "${provider}" used by primary model`,
-        fix: `Add auth: openclaw models auth login --provider ${provider}`,
-      });
+    if (
+      !hasAuth &&
+      !LOCAL_PROVIDERS.has(provider) &&
+      !SUBSCRIPTION_PROVIDERS.has(provider) &&
+      !configProviderHasKey(config, provider)
+    ) {
+      const plugin = findProvidingPlugin(config, provider);
+      if (plugin) {
+        results.push({
+          category: "Auth",
+          check: `Auth for primary model (${provider})`,
+          status: "info",
+          message: `No auth profile for provider "${provider}" — appears to be supplied by plugin "${plugin}", which manages its own auth`,
+        });
+      } else if (KNOWN_API_PROVIDERS.has(provider)) {
+        results.push({
+          category: "Auth",
+          check: `Auth for primary model (${provider})`,
+          status: "fail",
+          message: `No auth profile for provider "${provider}" used by primary model`,
+          fix: `Add auth: openclaw models auth login --provider ${provider}`,
+        });
+      } else {
+        results.push({
+          category: "Auth",
+          check: `Auth for primary model (${provider})`,
+          status: "warn",
+          message: `No auth profile for provider "${provider}" — if it is not plugin-provided or env-authenticated, the primary model will fail`,
+          fix: `Add auth: openclaw models auth login --provider ${provider}`,
+        });
+      }
     }
   }
 

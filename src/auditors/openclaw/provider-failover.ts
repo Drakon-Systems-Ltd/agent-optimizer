@@ -1,5 +1,12 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 import { loadAuthProfiles, loadModelsJson, expandPath } from "../../utils/config.js";
+import {
+  LOCAL_PROVIDERS,
+  SUBSCRIPTION_PROVIDERS,
+  KNOWN_API_PROVIDERS,
+  configProviderHasKey,
+  findProvidingPlugin,
+} from "../../utils/providers.js";
 
 // Known provider latency tiers (rough)
 const PROVIDER_LATENCY: Record<string, "fast" | "medium" | "slow"> = {
@@ -127,8 +134,8 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
   const now = Date.now();
   for (const model of allModels) {
     const provider = getProvider(model);
-    const isSubscription = provider === "claude-cli" || provider === "openai-codex" || provider === "codex" || provider === "github-copilot";
-    const isLocal = provider === "ollama" || provider === "lm-studio";
+    const isSubscription = SUBSCRIPTION_PROVIDERS.has(provider);
+    const isLocal = LOCAL_PROVIDERS.has(provider);
 
     if (isLocal) continue;
 
@@ -138,20 +145,41 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
     );
 
     if (providerProfiles.length === 0 && !isSubscription) {
-      // Check models.json for hardcoded keys
+      // Inline credential in the main config (models.providers.<p>) or the
+      // legacy agent-dir models.json both count as auth.
       const modelsJson = loadModelsJson(agentDir);
       const providers = (modelsJson as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
       const providerConfig = providers?.[provider];
-      const hasHardcodedKey = providerConfig?.apiKey && typeof providerConfig.apiKey === "string";
+      const hasHardcodedKey =
+        (providerConfig?.apiKey && typeof providerConfig.apiKey === "string") ||
+        configProviderHasKey(config, provider);
 
       if (!hasHardcodedKey) {
-        results.push({
-          category: "Provider Failover",
-          check: `Auth: ${model}`,
-          status: "fail",
-          message: `No auth found for ${model} — this fallback will fail if triggered`,
-          fix: `Add auth: openclaw models auth login --provider ${provider}`,
-        });
+        const plugin = findProvidingPlugin(config, provider);
+        if (plugin) {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "info",
+            message: `No auth profile for ${model} — provider "${provider}" appears to be supplied by plugin "${plugin}", which manages its own auth`,
+          });
+        } else if (KNOWN_API_PROVIDERS.has(provider)) {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "fail",
+            message: `No auth found for ${model} — this fallback will fail if triggered`,
+            fix: `Add auth: openclaw models auth login --provider ${provider}`,
+          });
+        } else {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "warn",
+            message: `No auth found for ${model} — if provider "${provider}" is not plugin-provided or env-authenticated, this fallback will fail if triggered`,
+            fix: `Add auth: openclaw models auth login --provider ${provider}`,
+          });
+        }
       }
       continue;
     }

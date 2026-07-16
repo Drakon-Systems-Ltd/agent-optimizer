@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
 import { resolve } from "path";
 import { homedir } from "os";
+import { createRequire } from "module";
 import type { OpenClawConfig, AuthProfiles } from "../types.js";
 
 export function expandPath(p: string): string {
@@ -19,8 +20,46 @@ export function loadConfig(configPath: string): OpenClawConfig | null {
 }
 
 export function loadAuthProfiles(agentDir: string): AuthProfiles | null {
-  const path = resolve(expandPath(agentDir), "auth-profiles.json");
-  return readJsonFile<AuthProfiles>(path);
+  const dir = expandPath(agentDir);
+  // OpenClaw 2026.6.6+ persists auth profiles in <agentDir>/openclaw-agent.sqlite
+  // (table auth_profile_store, one JSON blob per store_key). The legacy
+  // auth-profiles.json file is only left behind on unmigrated installs.
+  return (
+    readAuthStoreSqlite(resolve(dir, "openclaw-agent.sqlite")) ??
+    readJsonFile<AuthProfiles>(resolve(dir, "auth-profiles.json"))
+  );
+}
+
+function readAuthStoreSqlite(dbPath: string): AuthProfiles | null {
+  if (!existsSync(dbPath)) return null;
+  const originalEmitWarning = process.emitWarning;
+  try {
+    // node:sqlite needs Node 22.5+ and emits an ExperimentalWarning on load;
+    // suppress just that warning so audit output stays clean.
+    process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
+      if (String(warning).includes("SQLite is an experimental feature")) return;
+      return (originalEmitWarning as (...a: unknown[]) => void).call(process, warning, ...rest);
+    }) as typeof process.emitWarning;
+    const nodeRequire = createRequire(import.meta.url);
+    const { DatabaseSync } = nodeRequire("node:sqlite");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const row = db
+        .prepare("SELECT store_json FROM auth_profile_store WHERE store_key = 'primary'")
+        .get() as { store_json?: unknown } | undefined;
+      if (!row || typeof row.store_json !== "string") return null;
+      const parsed = JSON.parse(row.store_json) as AuthProfiles;
+      return parsed && typeof parsed === "object" && parsed.profiles ? parsed : null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Node <22.5 (no node:sqlite), locked/corrupt DB, or missing table —
+    // fall back to the legacy JSON store rather than failing the audit.
+    return null;
+  } finally {
+    process.emitWarning = originalEmitWarning;
+  }
 }
 
 export function loadModelsJson(agentDir: string): Record<string, unknown> | null {
