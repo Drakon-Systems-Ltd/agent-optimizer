@@ -8,51 +8,14 @@ import {
   findProvidingPlugin,
 } from "../../utils/providers.js";
 
-// Known provider latency tiers (rough)
-const PROVIDER_LATENCY: Record<string, "fast" | "medium" | "slow"> = {
-  "anthropic": "fast",
-  "claude-cli": "fast",
-  "openai": "fast",
-  "openai-codex": "fast",
-  "openrouter": "medium",
-  "google-ai": "fast",
-  "google": "fast",
-  "deepseek": "medium",
-  "xai": "medium",
-  "codex": "fast",
-  "github-copilot": "fast",
-  "lm-studio": "fast", // local
-  "ollama": "fast", // local
-  "arcee": "slow",
-};
-
-// Known cost tiers per MTok input (rough USD)
-const PROVIDER_COST: Record<string, number> = {
-  "anthropic/claude-opus-4-6": 15,
-  "anthropic/claude-opus-4-5": 15,
-  "anthropic/claude-sonnet-4-6": 3,
-  "anthropic/claude-sonnet-4-5": 3,
-  "anthropic/claude-haiku-4-5": 0.8,
-  "claude-cli/claude-opus-4-6": 0,
-  "claude-cli/claude-sonnet-4-6": 0,
-  "claude-cli/claude-sonnet-4-5": 0,
-  "claude-cli/claude-haiku-4-5": 0,
-  "openai-codex/gpt-5.4": 0,
-  "openai-codex/gpt-5.4-pro": 0,
-  "codex/gpt-5.4": 0,
-  "codex/gpt-5.4-pro": 0,
-  "codex/gpt-4o": 0,
-  "github-copilot/gpt-5.4": 0,
-  "openai/gpt-4o": 2.5,
-  "openai/gpt-4o-mini": 0.15,
-  "openrouter/moonshotai/kimi-k2.5": 1.0,
-  "google-ai/gemini-2.5-flash": 0.15,
-  "deepseek/deepseek-chat": 0.28,
-  "xai/grok-4-0709": 3,
-};
+import { getModelCost, PROVIDER_LATENCY } from "../../utils/model-costs.js";
 
 function getProvider(model: string): string {
   return model.split("/")[0];
+}
+
+function inputCost(model: string): number | null {
+  return getModelCost(model)?.input ?? null;
 }
 
 export function auditProviderFailover(config: OpenClawConfig, agentDir: string): AuditResult[] {
@@ -226,11 +189,11 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
 
   // --- Cost escalation analysis ---
 
-  const primaryCost = PROVIDER_COST[primary] ?? null;
+  const primaryCost = inputCost(primary);
   let costEscalationRisk = false;
 
   for (const fb of fallbacks) {
-    const fbCost = PROVIDER_COST[fb] ?? null;
+    const fbCost = inputCost(fb);
     if (primaryCost !== null && fbCost !== null && primaryCost === 0 && fbCost > 5) {
       costEscalationRisk = true;
       results.push({
@@ -264,7 +227,7 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
 
   // Check if cheaper models come before expensive ones
   const chainWithCosts = allModels
-    .map((m) => ({ model: m, cost: PROVIDER_COST[m] ?? -1 }))
+    .map((m) => ({ model: m, cost: getModelCost(m)?.input ?? -1 }))
     .filter((m) => m.cost >= 0);
 
   if (chainWithCosts.length >= 2) {

@@ -39,7 +39,7 @@ describe("auditCostEstimate", () => {
         defaults: {
           model: {
             primary: "anthropic/claude-sonnet-4-6",
-            fallbacks: ["anthropic/claude-opus-4-6"],
+            fallbacks: ["anthropic/claude-fable-5"],
           },
           contextTokens: 200000,
         },

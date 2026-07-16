@@ -77,7 +77,7 @@ describe("auditProviderFailover", () => {
         defaults: {
           model: {
             primary: "openai-codex/gpt-5.4",
-            fallbacks: ["anthropic/claude-opus-4-6"],
+            fallbacks: ["anthropic/claude-fable-5"],
           },
         },
       },
