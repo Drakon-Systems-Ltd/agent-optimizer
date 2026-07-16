@@ -1,22 +1,124 @@
 import { readFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
-import { resolve } from "path";
+import { resolve, dirname, isAbsolute, normalize } from "path";
 import { homedir } from "os";
 import { createRequire } from "module";
+import JSON5 from "json5";
 import type { OpenClawConfig, AuthProfiles } from "../types.js";
 
 export function expandPath(p: string): string {
   return p.replace(/^~/, homedir());
 }
 
+// OpenClaw parses config as JSON5 (comments, trailing commas, unquoted keys).
+// Try strict JSON first — it's faster and covers machine-written files.
+function parseJsonCompat<T>(raw: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return JSON5.parse(raw) as T;
+  }
+}
+
 export function readJsonFile<T>(path: string): T | null {
   const resolved = expandPath(path);
   if (!existsSync(resolved)) return null;
-  return JSON.parse(readFileSync(resolved, "utf-8")) as T;
+  return parseJsonCompat<T>(readFileSync(resolved, "utf-8"));
+}
+
+// --- $include support (mirrors OpenClaw src/config/includes.ts semantics:
+// value is a string or array of strings; an object with only $include is
+// replaced by the included content; sibling keys deep-merge OVER it; array
+// entries merge left-to-right; relative paths resolve against the including
+// file's directory; depth capped; cycles rejected.) ---
+
+const INCLUDE_KEY = "$include";
+const MAX_INCLUDE_DEPTH = 10;
+
+let configLoadIssues: string[] = [];
+
+/** Non-fatal problems from the last loadConfig() call ($include files missing,
+ * cycles, depth) — the audit should surface these, not crash on them. */
+export function getConfigLoadIssues(): string[] {
+  return configLoadIssues;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function deepMerge(a: unknown, b: unknown): unknown {
+  if (!isPlainObject(a) || !isPlainObject(b)) return b;
+  const out: Record<string, unknown> = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = k in out ? deepMerge(out[k], v) : v;
+  }
+  return out;
+}
+
+function loadIncludeFile(includePath: string, baseDir: string, stack: string[]): unknown {
+  const resolved = normalize(
+    isAbsolute(includePath) ? includePath : resolve(baseDir, expandPath(includePath))
+  );
+  if (stack.includes(resolved)) {
+    configLoadIssues.push(`Circular $include: ${[...stack, resolved].join(" -> ")}`);
+    return {};
+  }
+  if (stack.length >= MAX_INCLUDE_DEPTH) {
+    configLoadIssues.push(`$include depth limit (${MAX_INCLUDE_DEPTH}) exceeded at ${includePath}`);
+    return {};
+  }
+  if (!existsSync(resolved)) {
+    configLoadIssues.push(`$include file not found: ${includePath} (resolved to ${resolved}) — OpenClaw will fail to load this config`);
+    return {};
+  }
+  try {
+    const parsed = parseJsonCompat<unknown>(readFileSync(resolved, "utf-8"));
+    return resolveIncludes(parsed, dirname(resolved), [...stack, resolved]);
+  } catch (err) {
+    configLoadIssues.push(`$include file unparseable: ${includePath} (${(err as Error).message})`);
+    return {};
+  }
+}
+
+function resolveIncludes(value: unknown, baseDir: string, stack: string[]): unknown {
+  if (Array.isArray(value)) return value.map((v) => resolveIncludes(v, baseDir, stack));
+  if (!isPlainObject(value)) return value;
+
+  if (!(INCLUDE_KEY in value)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = resolveIncludes(v, baseDir, stack);
+    return out;
+  }
+
+  const includeValue = value[INCLUDE_KEY];
+  const paths = typeof includeValue === "string"
+    ? [includeValue]
+    : Array.isArray(includeValue)
+      ? includeValue.filter((p): p is string => typeof p === "string")
+      : [];
+
+  let included: unknown = {};
+  for (const p of paths) {
+    included = deepMerge(included, loadIncludeFile(p, baseDir, stack));
+  }
+
+  const rest: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === INCLUDE_KEY) continue;
+    rest[k] = resolveIncludes(v, baseDir, stack);
+  }
+  if (Object.keys(rest).length === 0) return included;
+  return deepMerge(included, rest);
 }
 
 export function loadConfig(configPath: string): OpenClawConfig | null {
-  return readJsonFile<OpenClawConfig>(configPath);
+  configLoadIssues = [];
+  const resolved = expandPath(configPath);
+  if (!existsSync(resolved)) return null;
+  const parsed = parseJsonCompat<unknown>(readFileSync(resolved, "utf-8"));
+  const withIncludes = resolveIncludes(parsed, dirname(resolved), [resolved]);
+  return isPlainObject(withIncludes) ? (withIncludes as OpenClawConfig) : null;
 }
 
 export function loadAuthProfiles(agentDir: string): AuthProfiles | null {

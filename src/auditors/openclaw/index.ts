@@ -1,6 +1,7 @@
 import ora from "ora";
 import chalk from "chalk";
 import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { getConfigLoadIssues } from "../../utils/config.js";
 import { auditModelConfig } from "./model-config.js";
 import { auditAuthProfiles } from "./auth-profiles.js";
 import { auditTokenEfficiency } from "./token-efficiency.js";
@@ -42,6 +43,17 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
   const { config, agentDir, openclawVersion, showProgress } = opts;
 
   const auditors: AuditorModule[] = [
+    {
+      name: "Config Includes",
+      run: () =>
+        getConfigLoadIssues().map((issue) => ({
+          category: "Config Includes",
+          check: "$include resolution",
+          status: "fail" as const,
+          message: issue,
+          fix: "Fix the $include path/content in openclaw.json",
+        })),
+    },
     { name: "Model Config", run: () => auditModelConfig(config) },
     { name: "Auth Profiles", run: () => auditAuthProfiles(config, agentDir) },
     { name: "Cost Estimator", run: () => auditCostEstimate(config, agentDir) },
