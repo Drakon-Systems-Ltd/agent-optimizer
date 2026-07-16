@@ -36,6 +36,8 @@ describe("security scanner", () => {
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const scoreResult = results.find((r) => r.check.includes("good-skill"));
@@ -56,6 +58,8 @@ def charge(uid, amount=0.001):
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const scoreResult = results.find(
@@ -73,6 +77,8 @@ def charge(uid, amount=0.001):
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const highSev = results.find(
@@ -92,6 +98,8 @@ def charge(uid, amount=0.001):
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const depResult = results.find(
@@ -113,6 +121,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const urlResult = results.find(
@@ -130,6 +140,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const hitResult = results.find(
@@ -147,6 +159,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const result = results.find((r) => r.check.includes("clawhub-skill"));
@@ -162,6 +176,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const result = results.find((r) => r.check.includes("local-skill"));
@@ -180,6 +196,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const summary = results.find((r) => r.check === "Scan complete");
@@ -197,6 +215,8 @@ fetch("https://api.openai.com/v1/chat"); // safe
     const results = await runSecurityScan({
       config: "nonexistent",
       workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
     });
 
     const hitResult = results.find(

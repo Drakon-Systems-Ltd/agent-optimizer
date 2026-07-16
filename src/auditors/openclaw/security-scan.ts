@@ -80,6 +80,27 @@ interface SkillReport {
   executableFiles: string[];
   score: "clean" | "info" | "suspicious" | "dangerous";
   scoreReason: string;
+  truncated: boolean;
+}
+
+// Vendored/generated trees are skipped: extensions routinely carry a full
+// node_modules (tens of thousands of files) and scanning it makes the scan
+// take minutes while producing noise, not signal.
+const SKIP_DIR_SEGMENTS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".venv",
+  "__pycache__",
+  ".next",
+  "vendor",
+]);
+
+const MAX_SCAN_FILES_PER_ITEM = 5000;
+
+function isSkippedPath(relPath: string): boolean {
+  return relPath.split(/[\\/]/).some((seg) => SKIP_DIR_SEGMENTS.has(seg));
 }
 
 function extractUrls(content: string): string[] {
@@ -149,6 +170,7 @@ function findExecutableFiles(dir: string): string[] {
 
   const entries = readdirSync(dir, { recursive: true }) as string[];
   for (const entry of entries) {
+    if (isSkippedPath(entry)) continue;
     const fullPath = join(dir, entry);
     try {
       const stat = statSync(fullPath);
@@ -199,7 +221,13 @@ function scanSkillDirectory(skillDir: string): SkillReport {
   let fileCount = 0;
 
   const entries = readdirSync(skillDir, { recursive: true }) as string[];
+  let truncated = false;
   for (const entry of entries) {
+    if (isSkippedPath(entry)) continue;
+    if (fileCount >= MAX_SCAN_FILES_PER_ITEM) {
+      truncated = true;
+      break;
+    }
     const fullPath = join(skillDir, entry);
     try {
       const stat = statSync(fullPath);
@@ -228,6 +256,7 @@ function scanSkillDirectory(skillDir: string): SkillReport {
     executableFiles: executables,
     score: "clean",
     scoreReason: "",
+    truncated,
   };
 
   const { score, reason } = scoreSkill(report);
@@ -239,14 +268,19 @@ function scanSkillDirectory(skillDir: string): SkillReport {
 
 // --- Main scan function ---
 
-export async function runSecurityScan(opts: { config: string; workspace?: string }): Promise<AuditResult[]> {
+export async function runSecurityScan(opts: {
+  config: string;
+  workspace?: string;
+  hooksDir?: string;
+  extensionsDir?: string;
+}): Promise<AuditResult[]> {
   const results: AuditResult[] = [];
   const config = loadConfig(opts.config);
 
   const workspace = opts.workspace ?? (config ? findWorkspace(config) : "~/.openclaw/workspace");
   const skillsDir = resolve(expandPath(workspace), "skills");
-  const hooksDir = expandPath("~/.openclaw/hooks");
-  const extensionsDir = expandPath("~/.openclaw/extensions");
+  const hooksDir = expandPath(opts.hooksDir ?? "~/.openclaw/hooks");
+  const extensionsDir = expandPath(opts.extensionsDir ?? "~/.openclaw/extensions");
 
   const scanTargets = [
     { path: skillsDir, label: "Skills", perItem: true },
@@ -313,7 +347,7 @@ export async function runSecurityScan(opts: { config: string; workspace?: string
           category: `${label} Scan`,
           check: `${report.name}${provenance}`,
           status: STATUS_MAP[report.score],
-          message: `${report.scoreReason} (${report.files} files scanned)`,
+          message: `${report.scoreReason} (${report.files} files scanned${report.truncated ? `, capped at ${report.files} — very large tree, coverage incomplete` : ""})`,
           fix: report.score === "dangerous"
             ? `REMOVE immediately: rm -rf ${fullPath.replace(expandPath("~/"), "~/")}`
             : report.score === "suspicious"
