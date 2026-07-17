@@ -114,13 +114,6 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "Plugins using api.registerEmbeddedExtensionFactory() will silently fail to load on v2026.4.24+. The Pi-only embedded-extension compatibility path was removed in favor of api.registerAgentToolResultMiddleware(), which targets the harness explicitly.",
     fix: "Grep your plugin source for `registerEmbeddedExtensionFactory` and replace with `registerAgentToolResultMiddleware`, supplying the appropriate target harness. See OpenClaw v2026.4.24 release notes for the migration shape.",
   },
-  {
-    fixedIn: "2026.4.24",
-    severity: "warn",
-    check: "Behind latest stable",
-    message: "OpenClaw v2026.4.24 is the current stable release. Older versions miss device-token scope-containment hardening, mixed-version gateway verification fixes, and the embedded-extension API removal that surfaces broken plugins.",
-    fix: "Run: npm install -g openclaw@latest",
-  },
   // v2026.4.12 fixes
   {
     fixedIn: "2026.4.12",
@@ -136,7 +129,197 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "Incomplete shell-wrapper detection allows env-argv assignment injection via interpreter-like safe bins",
     fix: "Upgrade to OpenClaw v2026.4.12+",
   },
+  // v2026.5.19 fixes
+  {
+    fixedIn: "2026.5.19",
+    severity: "fail",
+    check: "Control UI token disclosure",
+    message: "Unauthenticated Control UI bootstrap responses include gateway bearer tokens — anyone who can reach the UI port can obtain gateway auth",
+    fix: "Upgrade to OpenClaw v2026.5.19+",
+  },
+  {
+    fixedIn: "2026.5.19",
+    severity: "warn",
+    check: "Inline skill policy bypass",
+    message: "Inline skill dispatch skips the full tool-policy pipeline — skills can invoke tools the agent's policy would deny",
+    fix: "Upgrade to OpenClaw v2026.5.19+",
+  },
+  {
+    fixedIn: "2026.5.19",
+    severity: "warn",
+    check: "Browser URL allowlist gaps",
+    message: "Browser /act and /highlight routes don't enforce the URL allowlist — agents can drive the browser to non-allowlisted origins",
+    fix: "Upgrade to OpenClaw v2026.5.19+",
+  },
+  // v2026.5.20 fixes
+  {
+    fixedIn: "2026.5.20",
+    severity: "fail",
+    check: "Symlinked credential reads",
+    message: "Credential file reads don't fail closed on symlinks — a symlink swapped into a credential path can exfiltrate arbitrary files",
+    fix: "Upgrade to OpenClaw v2026.5.20+",
+  },
+  // v2026.5.22 fixes
+  {
+    fixedIn: "2026.5.22",
+    severity: "fail",
+    check: "Gateway token persistence leaks",
+    message: "OPENCLAW_GATEWAY_TOKEN written into systemd unit files and printed by Docker setup — gateway credentials land in world-readable state",
+    fix: "Upgrade to OpenClaw v2026.5.22+",
+  },
+  {
+    fixedIn: "2026.5.22",
+    severity: "warn",
+    check: "Denied-exec log leakage",
+    message: "Denied exec attempts logged with raw command line and environment — secrets in rejected commands persist in logs",
+    fix: "Upgrade to OpenClaw v2026.5.22+",
+  },
+  {
+    fixedIn: "2026.5.22",
+    severity: "warn",
+    check: "Control UI diffs XSS",
+    message: "Diffs viewer toolbar icon is an XSS sink — crafted diff content can execute script in the Control UI",
+    fix: "Upgrade to OpenClaw v2026.5.22+",
+  },
+  {
+    fixedIn: "2026.5.22",
+    severity: "warn",
+    check: "Agent XDG env override",
+    message: "Agent-supplied XDG environment overrides accepted — agents can redirect state/config directories",
+    fix: "Upgrade to OpenClaw v2026.5.22+",
+  },
+  // v2026.5.26 fixes
+  {
+    fixedIn: "2026.5.26",
+    severity: "fail",
+    check: "Gateway auth rate limiting",
+    message: "No default rate limit on gateway auth attempts when gateway.auth.rateLimit is unset — password/token brute-force is unthrottled",
+    fix: "Upgrade to OpenClaw v2026.5.26+ (rate limiter now on by default)",
+  },
+  {
+    fixedIn: "2026.5.26",
+    severity: "warn",
+    check: "memory_store prompt injection",
+    message: "memory_store accepts unfiltered content — prompt-injection payloads can persist into memory and replay into future turns",
+    fix: "Upgrade to OpenClaw v2026.5.26+",
+  },
+  {
+    fixedIn: "2026.5.26",
+    severity: "warn",
+    check: "Browser tab SSRF",
+    message: "Browser snapshot doesn't apply SSRF policy to tab URLs — internal endpoints reachable via agent-driven tabs",
+    fix: "Upgrade to OpenClaw v2026.5.26+",
+  },
+  {
+    fixedIn: "2026.5.26",
+    severity: "warn",
+    check: "Prompt marker spoofing",
+    message: "System-event text can spoof prompt boundary markers — untrusted content can masquerade as system instructions",
+    fix: "Upgrade to OpenClaw v2026.5.26+",
+  },
+  // v2026.5.27 fixes
+  {
+    fixedIn: "2026.5.27",
+    severity: "fail",
+    check: "No-auth Tailscale exposure",
+    message: "Gateway with auth disabled can be exposed over Tailscale serve/funnel — remote access with no authentication",
+    fix: "Upgrade to OpenClaw v2026.5.27+ (now rejected at startup)",
+  },
+  {
+    fixedIn: "2026.5.27",
+    severity: "warn",
+    check: "Device pairing approval",
+    message: "Node device-role pairing doesn't require admin approval — devices can self-enroll with node privileges",
+    fix: "Upgrade to OpenClaw v2026.5.27+",
+  },
+  // v2026.5.28 fixes
+  {
+    fixedIn: "2026.5.28",
+    severity: "warn",
+    check: "Phone-control authorization",
+    message: "Phone-control mutations not authorization-checked — non-owner senders could trigger device actions",
+    fix: "Upgrade to OpenClaw v2026.5.28+",
+  },
+  // v2026.6.6 fixes
+  {
+    fixedIn: "2026.6.6",
+    severity: "fail",
+    check: "Fail-open trust boundaries",
+    message: "Transcript, sandbox, MCP, browser, channel, and exec-approval boundaries fail open on errors; unauthorized Telegram DM text reaches cache/prompt",
+    fix: "Upgrade to OpenClaw v2026.6.6+ (boundaries now fail closed)",
+  },
+  // v2026.6.8 fixes
+  {
+    fixedIn: "2026.6.8",
+    severity: "warn",
+    check: "HTTP override admin gate",
+    message: "HTTP session and model override surfaces don't require admin — non-admin callers can redirect sessions to other models",
+    fix: "Upgrade to OpenClaw v2026.6.8+",
+  },
+  {
+    fixedIn: "2026.6.8",
+    severity: "warn",
+    check: "Vulnerable Hono runtime",
+    message: "Bundled Hono HTTP framework older than 4.12.25 has known vulnerabilities",
+    fix: "Upgrade to OpenClaw v2026.6.8+",
+  },
+  // v2026.6.9 fixes
+  {
+    fixedIn: "2026.6.9",
+    severity: "fail",
+    check: "Secrets in debug output",
+    message: "Debug and config output don't redact secrets — API keys and tokens appear in diagnostics and shared debug dumps",
+    fix: "Upgrade to OpenClaw v2026.6.9+",
+  },
+  // v2026.6.11 fixes
+  {
+    fixedIn: "2026.6.11",
+    severity: "fail",
+    check: "DOMPurify XSS (GHSA-cmwh-pvxp-8882)",
+    message: "Bundled DOMPurify vulnerable to GHSA-cmwh-pvxp-8882 — sanitizer bypass enables XSS in rendered agent content",
+    fix: "Upgrade to OpenClaw v2026.6.11+",
+  },
+  {
+    fixedIn: "2026.6.11",
+    severity: "warn",
+    check: "Blank TLS cert/key accepted",
+    message: "Gateway TLS accepts blank certificate/key paths — TLS silently misconfigured instead of rejected",
+    fix: "Upgrade to OpenClaw v2026.6.11+",
+  },
+  // v2026.7.1 fixes
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "SecretRef process exposure",
+    message: "Provider secrets resolved from SecretRefs held in plain process memory instead of behind process-local sentinels — plugins and logs can observe raw secrets",
+    fix: "Upgrade to OpenClaw v2026.7.1+",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "SQLite WAL safety",
+    message: "State databases opened without verifying the runtime's SQLite is patched — WAL corruption can destroy session/auth/memory state",
+    fix: "Upgrade to OpenClaw v2026.7.1+ and use Node 22/24 (Node 23 is rejected)",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "warn",
+    check: "Telegram token in logs",
+    message: "Telegram bot tokens not redacted across chunked log transports — tokens leak into shipped logs",
+    fix: "Upgrade to OpenClaw v2026.7.1+",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "warn",
+    check: "MCP/Teams response bounds",
+    message: "MCP OAuth and MS Teams Graph/Bot Framework responses not size-bounded — oversized responses can exhaust memory",
+    fix: "Upgrade to OpenClaw v2026.7.1+",
+  },
 ];
+
+// Newest OpenClaw release this advisory table covers. Bump when refreshing the
+// table — the version-currency checks below key off it.
+export const ADVISORY_TABLE_CURRENT = "2026.7.1";
 
 export function auditSecurityAdvisories(openclawVersion: string): AuditResult[] {
   const results: AuditResult[] = [];
@@ -159,6 +342,18 @@ export function auditSecurityAdvisories(openclawVersion: string): AuditResult[] 
     message: `Detected OpenClaw ${openclawVersion}`,
   });
 
+  // Detected version is newer than the advisory table — be honest that our
+  // data may be behind rather than implying a clean bill of health.
+  if (isOlderThan(ADVISORY_TABLE_CURRENT, openclawVersion)) {
+    results.push({
+      category: "Security",
+      check: "Advisory data currency",
+      status: "info",
+      message: `OpenClaw ${openclawVersion} is newer than this audit's advisory data (v${ADVISORY_TABLE_CURRENT}) — check upstream release notes and update agent-optimizer`,
+      fix: "Run: npm install -g @drakon-systems/agent-optimizer@latest",
+    });
+  }
+
   // Check each advisory
   const applicable = ADVISORIES.filter((a) => isOlderThan(openclawVersion, a.fixedIn));
 
@@ -167,7 +362,7 @@ export function auditSecurityAdvisories(openclawVersion: string): AuditResult[] 
       category: "Security",
       check: "Security advisories",
       status: "pass",
-      message: "No known security advisories for this version",
+      message: `No known security advisories for this version (advisory data current to v${ADVISORY_TABLE_CURRENT})`,
     });
     return results;
   }

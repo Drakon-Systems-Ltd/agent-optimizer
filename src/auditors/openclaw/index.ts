@@ -1,11 +1,13 @@
 import ora from "ora";
 import chalk from "chalk";
 import type { AuditResult, OpenClawConfig } from "../../types.js";
+import { getConfigLoadIssues } from "../../utils/config.js";
 import { auditModelConfig } from "./model-config.js";
 import { auditAuthProfiles } from "./auth-profiles.js";
 import { auditTokenEfficiency } from "./token-efficiency.js";
 import { auditPlugins } from "./plugins.js";
 import { auditLegacyOverrides } from "./legacy-overrides.js";
+import { auditLegacyConfigKeys } from "./legacy-config-keys.js";
 import { auditToolPermissions } from "./tool-permissions.js";
 import { auditCostEstimate } from "./cost-estimator.js";
 import { auditCacheEfficiency } from "./cache-efficiency.js";
@@ -42,6 +44,17 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
   const { config, agentDir, openclawVersion, showProgress } = opts;
 
   const auditors: AuditorModule[] = [
+    {
+      name: "Config Includes",
+      run: () =>
+        getConfigLoadIssues().map((issue) => ({
+          category: "Config Includes",
+          check: "$include resolution",
+          status: "fail" as const,
+          message: issue,
+          fix: "Fix the $include path/content in openclaw.json",
+        })),
+    },
     { name: "Model Config", run: () => auditModelConfig(config) },
     { name: "Auth Profiles", run: () => auditAuthProfiles(config, agentDir) },
     { name: "Cost Estimator", run: () => auditCostEstimate(config, agentDir) },
@@ -50,6 +63,7 @@ export function runOpenClawAuditors(opts: OpenClawRunnerOpts): AuditResult[] {
     { name: "Bootstrap Files", run: () => auditBootstrapFiles(config) },
     { name: "Plugins", run: () => auditPlugins(config) },
     { name: "Legacy Overrides", run: () => auditLegacyOverrides(config, agentDir) },
+    { name: "Legacy Config", run: () => auditLegacyConfigKeys(config) },
     { name: "Tool Permissions", run: () => auditToolPermissions(config) },
     { name: "Provider Failover", run: () => auditProviderFailover(config, agentDir) },
     { name: "Channel Security", run: () => auditChannelSecurity(config) },

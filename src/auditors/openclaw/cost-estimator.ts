@@ -1,47 +1,11 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 import { parseInterval, loadModelsJson, expandPath } from "../../utils/config.js";
-
-// Approximate token costs per million tokens (USD) for common models
-const MODEL_COSTS: Record<string, { input: number; output: number; cached?: number }> = {
-  "anthropic/claude-opus-4-6": { input: 15, output: 75, cached: 1.5 },
-  "anthropic/claude-opus-4-5": { input: 15, output: 75, cached: 1.5 },
-  "anthropic/claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3 },
-  "anthropic/claude-sonnet-4-5": { input: 3, output: 15, cached: 0.3 },
-  "anthropic/claude-haiku-4-5": { input: 0.8, output: 4, cached: 0.08 },
-  "claude-cli/claude-opus-4-6": { input: 0, output: 0 }, // subscription
-  "claude-cli/claude-sonnet-4-6": { input: 0, output: 0 }, // subscription
-  "claude-cli/claude-sonnet-4-5": { input: 0, output: 0 }, // subscription
-  "openai-codex/gpt-5.4": { input: 0, output: 0 }, // subscription
-  "openai-codex/gpt-5.4-pro": { input: 0, output: 0 }, // subscription (v2026.4.14+)
-  "codex/gpt-5.4": { input: 0, output: 0 }, // bundled Codex provider (v2026.4.12+)
-  "codex/gpt-5.4-pro": { input: 0, output: 0 }, // bundled Codex provider
-  "codex/gpt-4o": { input: 0, output: 0 }, // bundled Codex provider
-  "github-copilot/gpt-5.4": { input: 0, output: 0 }, // Copilot subscription
-  "openai/gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
-  "openai/gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
-  "openrouter/moonshotai/kimi-k2.5": { input: 1.0, output: 4.0 },
-  "google-ai/gemini-2.5-flash": { input: 0.15, output: 0.6, cached: 0.04 },
-  "deepseek/deepseek-chat": { input: 0.28, output: 0.42, cached: 0.028 },
-  "xai/grok-4-0709": { input: 3, output: 15 },
-};
+import { getModelCost } from "../../utils/model-costs.js";
 
 // Average tokens per turn (rough estimates)
 const AVG_INPUT_TOKENS_PER_TURN = 8000; // system prompt + context + user message
 const AVG_OUTPUT_TOKENS_PER_TURN = 2000;
 const CACHE_HIT_RATE = 0.6; // 60% cache hit on system prompt
-
-function getModelCost(model: string): { input: number; output: number; cached: number } | null {
-  const direct = MODEL_COSTS[model];
-  if (direct) return { input: direct.input, output: direct.output, cached: direct.cached ?? direct.input };
-
-  // Self-hosted / local models are free
-  if (model.startsWith("lm-studio/") || model.startsWith("ollama/")) {
-    return { input: 0, output: 0, cached: 0 };
-  }
-
-  // Check models.json for cost overrides
-  return null;
-}
 
 function estimateMonthlyCost(
   model: string,
@@ -151,8 +115,10 @@ export function auditCostEstimate(config: OpenClawConfig, agentDir?: string): Au
   // Check fallback costs
   const fallbacks = defaults.model?.fallbacks ?? [];
   for (const fb of fallbacks) {
+    // >= $10/MTok input is the Fable/Mythos premium tier — everything else
+    // currently prices at $5 or less.
     const fbCost = getModelCost(fb);
-    if (fbCost && fbCost.input > 10) {
+    if (fbCost && fbCost.input >= 10) {
       results.push({
         category: "Cost Estimate",
         check: `Fallback cost: ${fb}`,

@@ -441,7 +441,7 @@ program
     const licensed = !!hasValidLicense();
 
     if (opts.fix && !licensed) {
-      printBanner();
+      printBanner(!!opts.json);
       const results = await runFullAudit(opts);
       generateReport(results, { ...opts, licensed: false });
       console.log(chalk.red(`  ░░ --fix requires a license to apply changes.\n`));
@@ -449,7 +449,7 @@ program
       process.exit(1);
     }
 
-    printBanner();
+    printBanner(!!opts.json);
     const results = await runFullAudit(opts);
     generateReport(results, { ...opts, licensed });
 
@@ -735,8 +735,8 @@ program
   .option("--json", "Output results as JSON")
   .action(async (opts) => {
     requireLicense("fleet");
-    printBanner();
-    console.log(chalk.dim("  mode: ") + chalk.white("fleet audit\n"));
+    printBanner(!!opts.json);
+    if (!opts.json) console.log(chalk.dim("  mode: ") + chalk.white("fleet audit\n"));
     const { runFleetAudit } = await import("./auditors/openclaw/fleet.js");
     await runFleetAudit(opts);
   });

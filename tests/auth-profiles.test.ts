@@ -155,3 +155,65 @@ describe("auditAuthProfiles", () => {
     ).toBe(true);
   });
 });
+
+// OpenClaw 2026.6.6+ stores auth profiles in <agentDir>/openclaw-agent.sqlite.
+// node:sqlite needs Node 22.5+; skip these on older runtimes where the loader
+// falls back to legacy JSON anyway.
+const sqlite = await import("node:sqlite").then(
+  (m) => m,
+  () => null
+);
+
+describe.runIf(sqlite)("auditAuthProfiles (sqlite store)", () => {
+  function writeSqliteAuth(profiles: Record<string, unknown>) {
+    const db = new sqlite!.DatabaseSync(join(AGENT_DIR, "openclaw-agent.sqlite"));
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS auth_profile_store (store_key TEXT PRIMARY KEY, store_json TEXT, updated_at INTEGER)"
+    );
+    db.prepare(
+      "INSERT OR REPLACE INTO auth_profile_store (store_key, store_json, updated_at) VALUES ('primary', ?, ?)"
+    ).run(JSON.stringify({ version: 2, profiles }), 1780000000000);
+    db.close();
+  }
+
+  it("reads profiles from the sqlite store when no JSON file exists", () => {
+    writeSqliteAuth({
+      "anthropic:default": { type: "token", provider: "anthropic", token: "tok-aaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+    const config = {
+      agents: { defaults: { model: { primary: "anthropic/claude-opus-4-8" } } },
+    } as OpenClawConfig;
+    const results = auditAuthProfiles(config, AGENT_DIR);
+    expect(results.some((r) => r.check === "Auth profiles exist" && r.status === "fail")).toBe(false);
+    expect(results.some((r) => r.check.startsWith("Auth for primary model"))).toBe(false);
+  });
+
+  it("prefers the sqlite store over a stale legacy JSON file", () => {
+    writeAuth({}); // stale empty legacy file
+    writeSqliteAuth({
+      "openai:default": { type: "oauth", provider: "openai", access: "a", refresh: "r", expires: Date.now() + 86400000 },
+    });
+    const results = auditAuthProfiles({} as OpenClawConfig, AGENT_DIR);
+    expect(results.some((r) => r.check === "Auth profiles configured" && r.status === "fail")).toBe(false);
+    expect(results.some((r) => r.check === "Token expiry: openai:default" && r.status === "pass")).toBe(true);
+  });
+
+  it("falls back to legacy JSON when the sqlite DB has no auth store table", () => {
+    const db = new sqlite!.DatabaseSync(join(AGENT_DIR, "openclaw-agent.sqlite"));
+    db.exec("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)");
+    db.close();
+    writeAuth({
+      "deepseek:default": { type: "api-key", provider: "deepseek", key: "sk-ddddddddddddddddddddddd" },
+    });
+    const results = auditAuthProfiles({} as OpenClawConfig, AGENT_DIR);
+    expect(results.some((r) => r.check === "Auth profiles exist" && r.status === "fail")).toBe(false);
+  });
+
+  it("flags expired oauth tokens read from the sqlite store", () => {
+    writeSqliteAuth({
+      "xai:default": { type: "oauth", provider: "xai", access: "a", refresh: "r", expires: Date.now() - 3600000 },
+    });
+    const results = auditAuthProfiles({} as OpenClawConfig, AGENT_DIR);
+    expect(results.some((r) => r.check === "Token expiry: xai:default" && r.status === "fail")).toBe(true);
+  });
+});

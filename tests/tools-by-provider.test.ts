@@ -9,7 +9,7 @@ describe("auditToolsByProvider", () => {
   });
 
   it("passes for valid profile names", () => {
-    for (const profile of ["minimal", "coding", "default"]) {
+    for (const profile of ["minimal", "coding", "messaging", "full"]) {
       const config: OpenClawConfig = { tools: { byProvider: { "x/y": { profile } } } };
       const results = auditToolsByProvider(config);
       expect(results.every(r => r.status !== "fail")).toBe(true);
@@ -18,11 +18,15 @@ describe("auditToolsByProvider", () => {
   });
 
   it("flags unknown profile name", () => {
-    const config: OpenClawConfig = {
-      tools: { byProvider: { "openai/gpt-5.2": { profile: "agressive" } } },
-    };
-    const results = auditToolsByProvider(config);
-    expect(results.some(r => r.status === "fail" && r.check.includes("Unknown profile"))).toBe(true);
+    // "default" was never a real profile — the schema enum is
+    // minimal|coding|messaging|full.
+    for (const profile of ["agressive", "default"]) {
+      const config: OpenClawConfig = {
+        tools: { byProvider: { "openai/gpt-5.2": { profile } } },
+      };
+      const results = auditToolsByProvider(config);
+      expect(results.some(r => r.status === "fail" && r.check.includes("Unknown profile"))).toBe(true);
+    }
   });
 
   it("flags allow/deny conflict", () => {

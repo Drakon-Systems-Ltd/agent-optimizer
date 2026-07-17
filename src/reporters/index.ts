@@ -49,10 +49,13 @@ function renderHealthBar(score: number, width: number = 20): string {
 }
 
 // ── Banner ──────────────────────────────────────────────────────────
-function printBanner(): void {
-  console.log();
-  console.log(red("  🦞 ") + white("AGENT OPTIMIZER") + dim(` v${version}`));
-  console.log(dim("  ─────────────────────────────"));
+// In JSON mode the banner goes to stderr so stdout stays machine-parseable
+// (`audit --json | jq` must work).
+function printBanner(toStderr = false): void {
+  const log = toStderr ? console.error : console.log;
+  log();
+  log(red("  🦞 ") + white("AGENT OPTIMIZER") + dim(` v${version}`));
+  log(dim("  ─────────────────────────────"));
 }
 
 // ── ROI calculation ─────────────────────────────────────────────────

@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw.** 28 auditor modules, 410+ tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.6.
+**Multi-system: Claude Code + OpenClaw.** 29 auditor modules, 450+ tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.7.
 
 ## Install
 
@@ -125,7 +125,7 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Memory Search** | Embedding provider, hybrid search weights, embedding cache, sqlite-vec acceleration, dreaming, active memory, QMD backend |
 | **Local Models** | localModelLean recommendation, context window vs model capacity, compaction reserve overflow, subagent/heartbeat limits, fallback resilience |
 | **Hooks Deprecations** | Flags legacy `hooks.internal.handlers[]` array format and the deprecated `before_agent_start` event |
-| **Hook Events** | Validates hook event names against the v2026.3.14 schema — typos that would silently never fire are caught at audit time |
+| **Hook Events** | Validates hook event names against the current internal-hook registry (v2026.7) — typos that would silently never fire are caught at audit time |
 | **Config Patch Usage** | Scans hooks and agent `tool.alsoAllow` for `config.patch` / `config.apply` references that v2026.4.23 fails closed on |
 | **Dreaming Cron** | Reads `~/.openclaw/cron/jobs.json` and flags stale main-session dreaming jobs (v2026.4.23 decoupled dreaming from heartbeat) |
 | **Pairing CIDRs** | Validates `gateway.nodes.pairing.autoApproveCidrs` — flags `0.0.0.0/0`, public ranges, and overly wide private ranges that would auto-approve untrusted nodes |
@@ -135,7 +135,7 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Compaction Engine** | Flags deprecated `compaction.provider: "lossless-claw"` (migrate to `plugins.slots.contextEngine`); warns when `doctor --fix` would refuse auto-migration |
 | **Vision Models** | Validates `agents.defaults.imageModel` + `tools.media.image.models` ref shape (`provider/model`); redundancy between the two knobs |
 | **Hook Events** | Now recognises v2026.6 events: `command`, `session:patch`, `gateway:shutdown`, `gateway:pre-restart`, plus bare event types |
-| **Security Advisories** | Version-aware checks against 16 known issues from v2026.4.12–4.24 (config.patch bypass, secret leaks, symlink traversal, SSRF, timing attacks, registerEmbeddedExtensionFactory removal) |
+| **Security Advisories** | Version-aware checks against 39 known issues from v2026.4.12–2026.7.1 (config.patch bypass, Control UI token disclosure, DOMPurify XSS, SecretRef exposure, SQLite WAL safety, fail-open trust boundaries, and more) |
 
 ### Claude Code auditors (new in v0.11.0)
 
@@ -220,16 +220,16 @@ Agent Optimizer auto-detects your OpenClaw version and checks against known secu
 
 ```
 Security
-  ✓ OpenClaw version: Detected OpenClaw 2026.4.12
-  ✗ config.patch gateway bypass: config.patch callable from gateway tool — allows remote config modification
-  ✗ Approval prompt secret leak: Secrets visible in exec approval prompts
-  ✗ Workspace symlink traversal: agents.files.get/set don't prevent symlink-swap attacks
-  ⚠ Bearer timing attack: Gateway /mcp bearer uses plain !== comparison
-  ⚠ Memory path traversal: QMD backend allows reads of arbitrary workspace paths
-  ✗ Advisory summary: 12 advisories (3 critical, 9 warnings) — upgrade to v2026.4.15+
+  ✓ OpenClaw version: Detected OpenClaw 2026.6.8
+  ✗ Secrets in debug output: Debug and config output don't redact secrets
+  ✗ DOMPurify XSS (GHSA-cmwh-pvxp-8882): Sanitizer bypass enables XSS in rendered agent content
+  ✗ SQLite WAL safety: State databases opened without verifying the runtime's SQLite is patched
+  ⚠ Telegram token in logs: Bot tokens not redacted across chunked log transports
+  ⚠ Blank TLS cert/key accepted: TLS silently misconfigured instead of rejected
+  ✗ Advisory summary: 7 advisories (3 critical, 4 warnings) — upgrade to v2026.7.1+
 ```
 
-Covers 16 known issues across v2026.4.12 through v2026.4.24, including the v2026.4.24 removal of `api.registerEmbeddedExtensionFactory()` that breaks plugins still using the old extension API.
+Covers 39 known issues across v2026.4.12 through v2026.7.1, from the config.patch gateway bypass to the v2026.7.1 SecretRef process-exposure and SQLite WAL safety fixes. The audit also tells you when its advisory data is older than your installed OpenClaw.
 
 ## Licensing
 
@@ -280,8 +280,8 @@ Memory Search
   ✓ Dreaming enabled (schedule: 0 3 * * *)
 
 Security
-  ✓ OpenClaw version: Detected OpenClaw 2026.4.15
-  ✓ No known security advisories for this version
+  ✓ OpenClaw version: Detected OpenClaw 2026.7.1
+  ✓ No known security advisories for this version (advisory data current to v2026.7.1)
 
 Channel Security
   ⚠ No default DM policy set

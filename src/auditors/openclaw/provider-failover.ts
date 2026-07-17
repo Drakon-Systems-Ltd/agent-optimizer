@@ -1,51 +1,21 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 import { loadAuthProfiles, loadModelsJson, expandPath } from "../../utils/config.js";
+import {
+  LOCAL_PROVIDERS,
+  SUBSCRIPTION_PROVIDERS,
+  KNOWN_API_PROVIDERS,
+  configProviderHasKey,
+  findProvidingPlugin,
+} from "../../utils/providers.js";
 
-// Known provider latency tiers (rough)
-const PROVIDER_LATENCY: Record<string, "fast" | "medium" | "slow"> = {
-  "anthropic": "fast",
-  "claude-cli": "fast",
-  "openai": "fast",
-  "openai-codex": "fast",
-  "openrouter": "medium",
-  "google-ai": "fast",
-  "google": "fast",
-  "deepseek": "medium",
-  "xai": "medium",
-  "codex": "fast",
-  "github-copilot": "fast",
-  "lm-studio": "fast", // local
-  "ollama": "fast", // local
-  "arcee": "slow",
-};
-
-// Known cost tiers per MTok input (rough USD)
-const PROVIDER_COST: Record<string, number> = {
-  "anthropic/claude-opus-4-6": 15,
-  "anthropic/claude-opus-4-5": 15,
-  "anthropic/claude-sonnet-4-6": 3,
-  "anthropic/claude-sonnet-4-5": 3,
-  "anthropic/claude-haiku-4-5": 0.8,
-  "claude-cli/claude-opus-4-6": 0,
-  "claude-cli/claude-sonnet-4-6": 0,
-  "claude-cli/claude-sonnet-4-5": 0,
-  "claude-cli/claude-haiku-4-5": 0,
-  "openai-codex/gpt-5.4": 0,
-  "openai-codex/gpt-5.4-pro": 0,
-  "codex/gpt-5.4": 0,
-  "codex/gpt-5.4-pro": 0,
-  "codex/gpt-4o": 0,
-  "github-copilot/gpt-5.4": 0,
-  "openai/gpt-4o": 2.5,
-  "openai/gpt-4o-mini": 0.15,
-  "openrouter/moonshotai/kimi-k2.5": 1.0,
-  "google-ai/gemini-2.5-flash": 0.15,
-  "deepseek/deepseek-chat": 0.28,
-  "xai/grok-4-0709": 3,
-};
+import { getModelCost, PROVIDER_LATENCY } from "../../utils/model-costs.js";
 
 function getProvider(model: string): string {
   return model.split("/")[0];
+}
+
+function inputCost(model: string): number | null {
+  return getModelCost(model)?.input ?? null;
 }
 
 export function auditProviderFailover(config: OpenClawConfig, agentDir: string): AuditResult[] {
@@ -127,8 +97,8 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
   const now = Date.now();
   for (const model of allModels) {
     const provider = getProvider(model);
-    const isSubscription = provider === "claude-cli" || provider === "openai-codex" || provider === "codex" || provider === "github-copilot";
-    const isLocal = provider === "ollama" || provider === "lm-studio";
+    const isSubscription = SUBSCRIPTION_PROVIDERS.has(provider);
+    const isLocal = LOCAL_PROVIDERS.has(provider);
 
     if (isLocal) continue;
 
@@ -138,20 +108,41 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
     );
 
     if (providerProfiles.length === 0 && !isSubscription) {
-      // Check models.json for hardcoded keys
+      // Inline credential in the main config (models.providers.<p>) or the
+      // legacy agent-dir models.json both count as auth.
       const modelsJson = loadModelsJson(agentDir);
       const providers = (modelsJson as Record<string, unknown>)?.providers as Record<string, Record<string, unknown>> | undefined;
       const providerConfig = providers?.[provider];
-      const hasHardcodedKey = providerConfig?.apiKey && typeof providerConfig.apiKey === "string";
+      const hasHardcodedKey =
+        (providerConfig?.apiKey && typeof providerConfig.apiKey === "string") ||
+        configProviderHasKey(config, provider);
 
       if (!hasHardcodedKey) {
-        results.push({
-          category: "Provider Failover",
-          check: `Auth: ${model}`,
-          status: "fail",
-          message: `No auth found for ${model} — this fallback will fail if triggered`,
-          fix: `Add auth: openclaw models auth login --provider ${provider}`,
-        });
+        const plugin = findProvidingPlugin(config, provider);
+        if (plugin) {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "info",
+            message: `No auth profile for ${model} — provider "${provider}" appears to be supplied by plugin "${plugin}", which manages its own auth`,
+          });
+        } else if (KNOWN_API_PROVIDERS.has(provider)) {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "fail",
+            message: `No auth found for ${model} — this fallback will fail if triggered`,
+            fix: `Add auth: openclaw models auth login --provider ${provider}`,
+          });
+        } else {
+          results.push({
+            category: "Provider Failover",
+            check: `Auth: ${model}`,
+            status: "warn",
+            message: `No auth found for ${model} — if provider "${provider}" is not plugin-provided or env-authenticated, this fallback will fail if triggered`,
+            fix: `Add auth: openclaw models auth login --provider ${provider}`,
+          });
+        }
       }
       continue;
     }
@@ -198,11 +189,11 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
 
   // --- Cost escalation analysis ---
 
-  const primaryCost = PROVIDER_COST[primary] ?? null;
+  const primaryCost = inputCost(primary);
   let costEscalationRisk = false;
 
   for (const fb of fallbacks) {
-    const fbCost = PROVIDER_COST[fb] ?? null;
+    const fbCost = inputCost(fb);
     if (primaryCost !== null && fbCost !== null && primaryCost === 0 && fbCost > 5) {
       costEscalationRisk = true;
       results.push({
@@ -236,7 +227,7 @@ export function auditProviderFailover(config: OpenClawConfig, agentDir: string):
 
   // Check if cheaper models come before expensive ones
   const chainWithCosts = allModels
-    .map((m) => ({ model: m, cost: PROVIDER_COST[m] ?? -1 }))
+    .map((m) => ({ model: m, cost: getModelCost(m)?.input ?? -1 }))
     .filter((m) => m.cost >= 0);
 
   if (chainWithCosts.length >= 2) {

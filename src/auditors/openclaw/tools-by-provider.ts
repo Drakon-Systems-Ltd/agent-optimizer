@@ -1,6 +1,7 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 
-const KNOWN_PROFILES = new Set(["minimal", "coding", "default"]);
+// ToolProfileSchema in OpenClaw 2026.7.1 (zod-schema.agent-runtime.ts).
+const KNOWN_PROFILES = new Set(["minimal", "coding", "messaging", "full"]);
 
 export function auditToolsByProvider(config: OpenClawConfig): AuditResult[] {
   const results: AuditResult[] = [];

@@ -1,6 +1,6 @@
 {
   "name": "@drakon-systems/agent-optimizer",
-  "version": "0.11.3",
+  "version": "0.12.0",
   "description": "Audit, optimize, and secure OpenClaw AI agent deployments. Token waste detection, security scanning, config drift, fleet SSH audit. Free to install.",
   "type": "module",
   "bin": {
@@ -48,6 +48,7 @@
   "dependencies": {
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
+    "json5": "^2.2.3",
     "ora": "^8.0.0",
     "stripe": "^22.0.1"
   },

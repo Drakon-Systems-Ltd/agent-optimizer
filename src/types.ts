@@ -71,8 +71,11 @@ export interface OpenClawConfig {
   gateway?: Record<string, unknown>;
   channels?: Record<string, unknown>;
   tools?: {
-    profile?: "minimal" | "coding" | "default";
+    profile?: "minimal" | "coding" | "messaging" | "full";
+    // Legacy location: sandbox backend/ssh config moved to agents.defaults.sandbox
+    // (AgentSandboxSchema). tools.sandbox now only carries a tool policy.
     sandbox?: {
+      tools?: Record<string, unknown>;
       backend?: string;
       mode?: string;
       ssh?: {
@@ -152,6 +155,26 @@ export interface AgentDefaults {
     min?: number;
     max?: number;
   };
+  // Agent-level sandbox config (AgentSandboxSchema). Backend is a free string —
+  // "docker" and "ssh" are the bundled backends; plugins can register others.
+  sandbox?: SandboxConfig;
+}
+
+export interface SandboxConfig {
+  mode?: string; // off | non-main | all
+  backend?: string;
+  workspaceAccess?: string; // none | ro | rw
+  scope?: string; // session | agent | shared
+  workspaceRoot?: string;
+  ssh?: {
+    target?: string;
+    command?: string;
+    identityFile?: string;
+    certificateFile?: string;
+    knownHostsFile?: string;
+    strictHostKeyChecking?: boolean;
+  };
+  docker?: Record<string, unknown>;
 }
 
 // A model reference: bare "provider/model" string, or an object form.
@@ -181,6 +204,7 @@ export interface AgentEntry {
       allowFrom?: Record<string, string[]>;
     };
   };
+  sandbox?: SandboxConfig;
 }
 
 export interface ModelConfig {

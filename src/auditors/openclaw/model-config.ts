@@ -1,7 +1,9 @@
 import type { AuditResult, OpenClawConfig, FixOperation } from "../../types.js";
 
+// Full enum per OpenClaw 2026.7.1 zod-schema.agent-defaults.ts ("max" and
+// "ultra" added since 2026.6).
 const VALID_THINKING_DEFAULTS = [
-  "off", "minimal", "low", "medium", "high", "xhigh", "adaptive",
+  "off", "minimal", "low", "medium", "high", "xhigh", "adaptive", "max", "ultra",
 ];
 
 // Models with known aliases that should be canonicalized
@@ -194,12 +196,26 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
   }
 
   // Check for unknown config keys that crash the gateway
+  // AgentDefaultsSchema keys from OpenClaw 2026.7.1 (zod-schema.agent-defaults.ts).
+  // The schema is Zod-strict, so unknown keys make the whole config fail
+  // validation. Old pre-2026.5 keys (fastMode, dreaming, activeMemory,
+  // execPolicy, dmScope, memory) were removed and are correctly flagged now.
   const knownDefaults = [
-    "model", "models", "workspace", "contextTokens", "contextPruning",
-    "compaction", "heartbeat", "maxConcurrent", "subagents", "thinkingDefault",
-    "envelopeTimezone", "envelopeTimestamp", "memorySearch", "imageGenerationModel",
-    "imageMaxDimensionPx", "fastMode", "dreaming", "activeMemory", "execPolicy",
-    "dmScope", "memory", "experimental", "timeoutSeconds",
+    "blockStreamingBreak", "blockStreamingChunk", "blockStreamingCoalesce",
+    "blockStreamingDefault", "bootstrapMaxChars", "bootstrapPromptTruncationWarning",
+    "bootstrapTotalMaxChars", "cliBackends", "compaction", "contextInjection",
+    "contextLimits", "contextPruning", "contextTokens", "elevatedDefault",
+    "embeddedAgent", "envelopeElapsed", "envelopeTimestamp", "envelopeTimezone",
+    "experimental", "heartbeat", "humanDelay", "imageGenerationModel",
+    "imageMaxDimensionPx", "imageModel", "imageQuality", "maxConcurrent",
+    "mediaGenerationAutoProviderFallback", "mediaMaxMb", "memorySearch",
+    "model", "models", "musicGenerationModel", "params", "pdfMaxBytesMb",
+    "pdfMaxPages", "pdfModel", "promptOverlays", "reasoningDefault", "repoRoot",
+    "runRetries", "sandbox", "silentReply", "skills", "skipBootstrap",
+    "skipOptionalBootstrapFiles", "startupContext", "subagents",
+    "thinkingDefault", "timeFormat", "timeoutSeconds", "toolProgressDetail",
+    "typingIntervalSeconds", "typingMode", "userTimezone", "utilityModel",
+    "verboseDefault", "videoGenerationModel", "voiceModel", "workspace",
   ];
   if (defaults) {
     const unknown = Object.keys(defaults).filter(
@@ -210,8 +226,8 @@ export function auditModelConfig(config: OpenClawConfig): AuditResult[] {
         category: "Model Config",
         check: "Unknown config keys",
         status: "warn",
-        message: `Unknown keys in agents.defaults: ${unknown.join(", ")} — may crash gateway`,
-        fix: "Remove unrecognized keys",
+        message: `Unknown keys in agents.defaults: ${unknown.join(", ")} — OpenClaw's schema is strict and rejects configs with unrecognized keys`,
+        fix: "Remove or migrate unrecognized keys (openclaw doctor can help)",
       });
     }
   }
