@@ -30,6 +30,42 @@ export const OPTIMIZATION_TAGS = [
 
 export type OptimizationTag = (typeof OPTIMIZATION_TAGS)[number];
 
+export interface OpenClawOptimization extends Optimization {
+  tag: OptimizationTag;
+  risk: "low" | "medium" | "high";
+  requiresRestart: boolean;
+}
+
+// Risk: low = token/limit tuning, instantly reversible; medium = user-visible
+// behavior change; high = reserved for anything touching model routing (all
+// current model suggestions are info-only, so nothing emits high today).
+// requiresRestart: true only for keys OpenClaw cannot hot-reload. 2026.7.1's
+// reload modes (gateway.reload.mode hot|hybrid) hot-apply agents.defaults.* and
+// channels.*; keep this map conservative and verify against the OpenClaw
+// source worktree if a new tag is added.
+const TAG_META: Record<OptimizationTag, { risk: "low" | "medium" | "high"; requiresRestart: boolean }> = {
+  context: { risk: "low", requiresRestart: false },
+  heartbeat: { risk: "medium", requiresRestart: false },
+  subagents: { risk: "low", requiresRestart: false },
+  compaction: { risk: "low", requiresRestart: false },
+  pruning: { risk: "low", requiresRestart: false },
+  "image-max-dim": { risk: "low", requiresRestart: false },
+  "bootstrap-max-chars": { risk: "low", requiresRestart: false },
+  "bootstrap-total-max-chars": { risk: "low", requiresRestart: false },
+  "isolated-cron": { risk: "medium", requiresRestart: false },
+  "cache-ttl-pruning": { risk: "low", requiresRestart: false },
+  "fallback-chain": { risk: "medium", requiresRestart: false },
+  "channel-history-limit": { risk: "medium", requiresRestart: false },
+  "channel-media-max": { risk: "medium", requiresRestart: false },
+  "channel-text-chunk": { risk: "medium", requiresRestart: false },
+  "discord-idle-hours": { risk: "medium", requiresRestart: false },
+  "channel-model-routing": { risk: "medium", requiresRestart: false },
+  "tools-profile": { risk: "medium", requiresRestart: false },
+  "runRetries-cap": { risk: "low", requiresRestart: false },
+  "discord-suppress-embeds": { risk: "medium", requiresRestart: false },
+  "slack-unfurl-links": { risk: "medium", requiresRestart: false },
+};
+
 interface ProfileTargets {
   contextTokens: number;
   heartbeat: string;
@@ -105,8 +141,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function getOptimizations(
   config: OpenClawConfig,
   profile: string
-): Optimization[] {
-  const opts: Optimization[] = [];
+): OpenClawOptimization[] {
+  const opts: OpenClawOptimization[] = [];
+  // All entries route through here so no push site can omit risk/requiresRestart.
+  const push = (o: Omit<OpenClawOptimization, "risk" | "requiresRestart">) =>
+    opts.push({ ...o, ...TAG_META[o.tag] });
   const target = PROFILES[profile] ?? PROFILES.balanced;
   const defaults = config.agents?.defaults;
 
@@ -115,7 +154,7 @@ export function getOptimizations(
     // Context tokens
     const currentContext = defaults.contextTokens ?? 200000;
     if (currentContext > target.contextTokens) {
-      opts.push({
+      push({
         tag: "context",
         path: "agents.defaults.contextTokens",
         current: currentContext,
@@ -127,7 +166,7 @@ export function getOptimizations(
     // Heartbeat
     const currentHeartbeat = defaults.heartbeat?.every ?? "1h";
     if (currentHeartbeat !== target.heartbeat) {
-      opts.push({
+      push({
         tag: "heartbeat",
         path: "agents.defaults.heartbeat.every",
         current: currentHeartbeat,
@@ -139,7 +178,7 @@ export function getOptimizations(
     // Subagents
     const currentSub = defaults.subagents?.maxConcurrent ?? 4;
     if (currentSub > target.subagents) {
-      opts.push({
+      push({
         tag: "subagents",
         path: "agents.defaults.subagents.maxConcurrent",
         current: currentSub,
@@ -150,7 +189,7 @@ export function getOptimizations(
 
     // Compaction
     if (!defaults.compaction?.mode) {
-      opts.push({
+      push({
         tag: "compaction",
         path: "agents.defaults.compaction.mode",
         current: "none",
@@ -161,7 +200,7 @@ export function getOptimizations(
 
     // Context pruning (legacy — when totally unset)
     if (!defaults.contextPruning?.mode) {
-      opts.push({
+      push({
         tag: "pruning",
         path: "agents.defaults.contextPruning",
         current: "none",
@@ -181,7 +220,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.imageMaxDim;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "image-max-dim",
         path: "agents.defaults.imageMaxDimensionPx",
         current: cur ?? "unset",
@@ -200,7 +239,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.bootstrapMax;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "bootstrap-max-chars",
         path: "agents.defaults.bootstrapMaxChars",
         current: cur ?? "unset",
@@ -219,7 +258,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.bootstrapTotal;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "bootstrap-total-max-chars",
         path: "agents.defaults.bootstrapTotalMaxChars",
         current: cur ?? "unset",
@@ -236,7 +275,7 @@ export function getOptimizations(
     const heartbeat = defaultsRaw.heartbeat as Record<string, unknown> | undefined;
     const current = heartbeat?.isolatedSession;
     if (current !== true) {
-      opts.push({
+      push({
         tag: "isolated-cron",
         path: "agents.defaults.heartbeat.isolatedSession",
         current: current ?? false,
@@ -249,7 +288,7 @@ export function getOptimizations(
   // cache-ttl-pruning (balanced / aggressive, only if mode is unset)
   if (profile === "balanced" || profile === "aggressive") {
     if (!defaults?.contextPruning?.mode) {
-      opts.push({
+      push({
         tag: "cache-ttl-pruning",
         path: "agents.defaults.contextPruning.mode",
         current: defaults?.contextPruning?.mode ?? "unset",
@@ -271,7 +310,7 @@ export function getOptimizations(
         // suggest variants the user can edit — never duplicate exactly
         padded.push(`${primary}-fallback-${padded.length + 1}`);
       }
-      opts.push({
+      push({
         tag: "fallback-chain",
         path: "agents.defaults.model.fallbacks",
         current: fallbacks,
@@ -292,7 +331,7 @@ export function getOptimizations(
     {
       const cur = ch.historyLimit;
       if (typeof cur === "number" && cur > target.channelHistoryLimit) {
-        opts.push({
+        push({
           tag: "channel-history-limit",
           path: `channels.${provider}.historyLimit`,
           current: cur,
@@ -306,7 +345,7 @@ export function getOptimizations(
     {
       const cur = ch.mediaMaxMb;
       if (typeof cur === "number" && cur > target.channelMediaMax) {
-        opts.push({
+        push({
           tag: "channel-media-max",
           path: `channels.${provider}.mediaMaxMb`,
           current: cur,
@@ -320,7 +359,7 @@ export function getOptimizations(
     {
       const cur = ch.textChunkLimit;
       if (typeof cur === "number" && cur > target.channelTextChunk) {
-        opts.push({
+        push({
           tag: "channel-text-chunk",
           path: `channels.${provider}.textChunkLimit`,
           current: cur,
@@ -339,7 +378,7 @@ export function getOptimizations(
       if (isPlainObject(tb)) {
         const cur = tb.idleHours;
         if (typeof cur === "number" && cur > target.discordIdleHours) {
-          opts.push({
+          push({
             tag: "discord-idle-hours",
             path: "channels.discord.threadBindings.idleHours",
             current: cur,
@@ -369,7 +408,7 @@ export function getOptimizations(
           sample[provider] =
             provider === "discord" || provider === "telegram" ? "haiku" : "sonnet";
         }
-        opts.push({
+        push({
           tag: "channel-model-routing",
           path: "channels.modelByChannel",
           current: routing ?? "unset",
@@ -385,7 +424,7 @@ export function getOptimizations(
   {
     const toolsCur = (config.tools?.profile ?? "full") as string;
     if (toolsCur !== target.toolsProfile) {
-      opts.push({
+      push({
         tag: "tools-profile",
         path: "tools.profile",
         current: config.tools?.profile ?? "full",
@@ -415,7 +454,7 @@ export function getOptimizations(
       const safeMax = Math.max(targetMax, existingMin);
       // Only suggest if it actually lowers the cap (can't reduce below min).
       if (safeMax < current) {
-        opts.push({
+        push({
           tag: "runRetries-cap",
           path: "agents.defaults.runRetries",
           current,
@@ -432,7 +471,7 @@ export function getOptimizations(
     const channelsRaw = (config.channels ?? {}) as Record<string, any>;
     const discord = channelsRaw.discord;
     if (isPlainObject(discord) && discord.suppressEmbeds === false) {
-      opts.push({
+      push({
         tag: "discord-suppress-embeds",
         path: "channels.discord.suppressEmbeds",
         current: false,
@@ -448,7 +487,7 @@ export function getOptimizations(
     const channelsRaw = (config.channels ?? {}) as Record<string, any>;
     const slack = channelsRaw.slack;
     if (isPlainObject(slack) && slack.unfurlLinks === true) {
-      opts.push({
+      push({
         tag: "slack-unfurl-links",
         path: "channels.slack.unfurlLinks",
         current: true,

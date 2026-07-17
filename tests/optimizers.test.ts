@@ -506,6 +506,20 @@ describe("getOptimizations — slack-unfurl-links (info-only)", () => {
   });
 });
 
+describe("getOptimizations — risk + requiresRestart metadata", () => {
+  it("every optimization carries risk and requiresRestart metadata", () => {
+    const config: OpenClawConfig = {
+      agents: { defaults: { contextTokens: 1000000, heartbeat: { every: "30m" } } },
+    };
+    const opts = getOptimizations(config, "balanced");
+    expect(opts.length).toBeGreaterThan(0);
+    for (const o of opts) {
+      expect(["low", "medium", "high"]).toContain(o.risk);
+      expect(typeof o.requiresRestart).toBe("boolean");
+    }
+  });
+});
+
 describe("OPTIMIZATION_TAGS", () => {
   it("includes all 20 dimensions", () => {
     expect(OPTIMIZATION_TAGS.length).toBe(20);
