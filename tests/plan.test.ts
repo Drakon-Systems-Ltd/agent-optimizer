@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
+import { mkdirSync, writeFileSync, appendFileSync, rmSync } from "fs";
 import { join } from "path";
 import { buildPlan, savePlan, loadPlan, configHashOf } from "../src/optimizers/plan.js";
 
@@ -44,5 +44,47 @@ describe("plan module", () => {
   it("loadPlan returns null for unknown ids and rejects path traversal", () => {
     expect(loadPlan("nope", PLANS)).toBeNull();
     expect(loadPlan("../../etc/passwd", PLANS)).toBeNull();
+  });
+
+  it("hash and planId change when the top-level config changes by one byte", () => {
+    const before = buildPlan(CFG, "balanced");
+    appendFileSync(CFG, " "); // trailing whitespace — still valid JSON
+    const after = buildPlan(CFG, "balanced");
+    expect(after.configHash).not.toBe(before.configHash);
+    expect(after.planId).not.toBe(before.planId);
+  });
+
+  it("hash covers $include'd fragments, not just the top-level file", () => {
+    const FRAG = join(DIR, "agents.json");
+    writeFileSync(
+      FRAG,
+      JSON.stringify({ defaults: { contextTokens: 1000000, heartbeat: { every: "30m" } } })
+    );
+    writeFileSync(CFG, JSON.stringify({ agents: { $include: "agents.json" } }));
+    const before = configHashOf(CFG);
+    // standalone discovery must agree with buildPlan's hash
+    expect(buildPlan(CFG, "balanced").configHash).toBe(before);
+    // edit ONLY the fragment — top-level bytes are unchanged
+    writeFileSync(
+      FRAG,
+      JSON.stringify({ defaults: { contextTokens: 900000, heartbeat: { every: "30m" } } })
+    );
+    expect(configHashOf(CFG)).not.toBe(before);
+  });
+
+  it("loadPlan throws with the file path on a corrupt plan file", () => {
+    mkdirSync(PLANS, { recursive: true });
+    writeFileSync(join(PLANS, "aaaaaaaaaaaa.json"), "{not json");
+    expect(() => loadPlan("aaaaaaaaaaaa", PLANS)).toThrow(/aaaaaaaaaaaa\.json/);
+  });
+
+  it("loadPlan returns null for an unsupported schemaVersion", () => {
+    mkdirSync(PLANS, { recursive: true });
+    writeFileSync(join(PLANS, "bbbbbbbbbbbb.json"), JSON.stringify({ schemaVersion: 2 }));
+    expect(loadPlan("bbbbbbbbbbbb", PLANS)).toBeNull();
+  });
+
+  it("buildPlan throws on an unknown profile", () => {
+    expect(() => buildPlan(CFG, "turbo")).toThrow(/profile/i);
   });
 });

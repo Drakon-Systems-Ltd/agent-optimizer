@@ -135,6 +135,9 @@ const PROFILES: Record<string, ProfileTargets> = {
   },
 };
 
+/** Known optimize profiles, derived from PROFILES so the list can't drift. */
+export const PROFILE_NAMES: readonly string[] = Object.keys(PROFILES);
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
