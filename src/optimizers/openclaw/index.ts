@@ -30,20 +30,25 @@ export const OPTIMIZATION_TAGS = [
 
 export type OptimizationTag = (typeof OPTIMIZATION_TAGS)[number];
 
+export type RiskLevel = "low" | "medium" | "high";
+
 export interface OpenClawOptimization extends Optimization {
   tag: OptimizationTag;
-  risk: "low" | "medium" | "high";
+  risk: RiskLevel;
   requiresRestart: boolean;
 }
 
+type TagMeta = Pick<OpenClawOptimization, "risk" | "requiresRestart">;
+
 // Risk: low = token/limit tuning, instantly reversible; medium = user-visible
-// behavior change; high = reserved for anything touching model routing (all
-// current model suggestions are info-only, so nothing emits high today).
+// behavior change; high = applying an actual model change. Today's model tags
+// (fallback-chain, channel-model-routing) are info-only suggestions that never
+// get applied, hence medium — nothing emits high yet.
 // requiresRestart: true only for keys OpenClaw cannot hot-reload. 2026.7.1's
-// reload modes (gateway.reload.mode hot|hybrid) hot-apply agents.defaults.* and
-// channels.*; keep this map conservative and verify against the OpenClaw
-// source worktree if a new tag is added.
-const TAG_META: Record<OptimizationTag, { risk: "low" | "medium" | "high"; requiresRestart: boolean }> = {
+// reload modes (gateway.reload.mode hot|hybrid) hot-apply agents.defaults.*,
+// channels.*, and tools.* (covers tools-profile); keep this map conservative
+// and verify against the OpenClaw source worktree if a new tag is added.
+const TAG_META: Record<OptimizationTag, TagMeta> = {
   context: { risk: "low", requiresRestart: false },
   heartbeat: { risk: "medium", requiresRestart: false },
   subagents: { risk: "low", requiresRestart: false },
@@ -144,7 +149,7 @@ export function getOptimizations(
 ): OpenClawOptimization[] {
   const opts: OpenClawOptimization[] = [];
   // All entries route through here so no push site can omit risk/requiresRestart.
-  const push = (o: Omit<OpenClawOptimization, "risk" | "requiresRestart">) =>
+  const push = (o: Omit<OpenClawOptimization, keyof TagMeta>) =>
     opts.push({ ...o, ...TAG_META[o.tag] });
   const target = PROFILES[profile] ?? PROFILES.balanced;
   const defaults = config.agents?.defaults;

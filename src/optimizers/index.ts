@@ -17,7 +17,7 @@ export interface Optimization {
 // back-compat with callers that imported from "src/optimizers/index.js".
 export { OPTIMIZATION_TAGS, CC_OPTIMIZATION_TAGS };
 export { getOptimizations } from "./openclaw/index.js";
-export type { OptimizationTag } from "./openclaw/index.js";
+export type { OptimizationTag, OpenClawOptimization, RiskLevel } from "./openclaw/index.js";
 export { getClaudeCodeOptimizations } from "./claude-code/index.js";
 export type { CcOptimizationTag, ClaudeCodeSettings } from "./claude-code/index.js";
 

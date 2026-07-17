@@ -517,6 +517,11 @@ describe("getOptimizations — risk + requiresRestart metadata", () => {
       expect(["low", "medium", "high"]).toContain(o.risk);
       expect(typeof o.requiresRestart).toBe("boolean");
     }
+    // Pin one exact value so the map can't silently drift to all-defaults.
+    expect(opts.find((o) => o.tag === "context")).toMatchObject({
+      risk: "low",
+      requiresRestart: false,
+    });
   });
 });
 
