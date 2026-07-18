@@ -1,12 +1,12 @@
 import { createHash } from "crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join, resolve } from "path";
-import { homedir } from "os";
 import {
   loadConfigFromString,
   expandPath,
   getConfigIncludePaths,
 } from "../utils/config.js";
+import { agentOptimizerHome } from "../utils/paths.js";
 import { getOptimizations, PROFILE_NAMES, type RiskLevel } from "./openclaw/index.js";
 
 export interface PlanProposal {
@@ -66,7 +66,7 @@ export function configHashOf(configPath: string, includePaths?: string[]): strin
 }
 
 export function defaultPlansDir(): string {
-  return join(homedir(), ".agent-optimizer", "plans");
+  return join(agentOptimizerHome(), "plans");
 }
 
 export function buildPlan(configPath: string, profile: string): OptimizePlan {
