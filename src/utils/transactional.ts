@@ -79,6 +79,8 @@ export class RollbackFailedError extends Error {
   readonly reasons: string[];
   readonly backupId: string;
   readonly restored: string[];
+  /** The path the restore choked on when a partial restore identified one; ""
+   *  when the failure was not file-specific (the detail is then in .message). */
   readonly failed: string;
   constructor(
     message: string,
@@ -150,16 +152,26 @@ function acquireLock(lockDir: string, staleLockMs: number): void {
       throw e2;
     }
   }
-  writeFileSync(
-    join(lockDir, "lock.json"),
-    JSON.stringify({ pid: process.pid, startedAt: Date.now() } satisfies LockMeta)
-  );
+  // We now own the lock dir. Stamp it — but if that write fails, release the dir
+  // we just created so a failed stamp can't leak the lock. This cleanup stays
+  // INSIDE acquireLock (we own the dir only here); the outer finally must not
+  // handle it, because that finally also runs on the ApplyLockedError path where
+  // we do NOT own the lock.
+  try {
+    writeFileSync(
+      join(lockDir, "lock.json"),
+      JSON.stringify({ pid: process.pid, startedAt: Date.now() } satisfies LockMeta)
+    );
+  } catch (e) {
+    rmSync(lockDir, { recursive: true, force: true });
+    throw e;
+  }
 }
 
 /** Restore the backup and, whatever the outcome, throw the right typed error.
  *  Never returns normally — either ApplyRolledBackError (clean) or
  *  RollbackFailedError (double failure). */
-function rollback(reasons: string[], backupId: string, backupsDir: string): never {
+function rollbackAndThrow(reasons: string[], backupId: string, backupsDir: string): never {
   try {
     restoreBackup(backupId, backupsDir);
   } catch (e) {
@@ -176,10 +188,11 @@ function rollback(reasons: string[], backupId: string, backupsDir: string): neve
       });
     }
     // Preflight / non-partial failure: restore threw before committing anything,
-    // so nothing was reverted (restored: []).
+    // so nothing was reverted (restored: []) and no single path is to blame
+    // (failed: "" — the detail is in .message).
     throw new RollbackFailedError(
       `Rollback failed before any original was restored: ${(e as Error).message}. Files remain in the mutated state. (rolling back because: ${reasons[0] ?? "unknown"})`,
-      { reasons, backupId, restored: [], failed: (e as Error).message }
+      { reasons, backupId, restored: [], failed: "" }
     );
   }
   throw new ApplyRolledBackError(
@@ -199,10 +212,26 @@ function rollback(reasons: string[], backupId: string, backupsDir: string): neve
  *  - RollbackFailedError   — mutation was bad AND rollback failed (disk maybe dirty)
  */
 export function transactionalApply(opts: TransactionalApplyOptions): ApplyResult {
+  // Guard BEFORE the lock/backup: files[0] drives the baseline and verify, so an
+  // empty list is caller misuse — fail with a clear message rather than letting
+  // countFails(undefined) collapse into a confusing ApplyPreconditionError.
+  if (opts.files.length === 0) {
+    throw new Error("transactionalApply requires at least one file in `files`");
+  }
+
   const backupsDir = opts.backupsDir ?? defaultBackupsDir();
   const lockDir = opts.lockDir ?? join(dirname(resolve(backupsDir)), "apply.lock");
   const staleLockMs = opts.staleLockMs ?? DEFAULT_STALE_LOCK_MS;
 
+  // Acquire OUTSIDE the try/finally on purpose: if acquire throws ApplyLockedError
+  // we do NOT own the lock, and the finally below (which rmSync's lockDir) must
+  // not run — it would delete the current holder's lock and break their apply.
+  // Only once acquireLock returns do we own the dir and take on its release.
+  // Design assumption: an apply completes in well under staleLockMs (sub-second
+  // vs the 10-minute default), so unconditionally releasing in the finally is
+  // safe — we cannot plausibly be releasing a lock a later apply has reclaimed.
+  // If that ever stopped holding, an owner-token (stamp a nonce, verify it before
+  // rmSync) would close the residual TOCTOU; unnecessary at current durations.
   acquireLock(lockDir, staleLockMs);
   try {
     // (a) Refuse up front if the pre-apply config is already broken. A non-finite
@@ -216,19 +245,31 @@ export function transactionalApply(opts: TransactionalApplyOptions): ApplyResult
       );
     }
 
-    // (b) Snapshot every file so we can revert to exact bytes.
-    const backupId = createBackup(opts.files, backupsDir);
+    // (b) Snapshot every file so we can revert to exact bytes. createBackup
+    // existence-checks every input BEFORE writing anything and never touches an
+    // original, so a missing file aborts with no partial generation and the disk
+    // untouched — semantically a precondition failure (e.g. an agent pointed at a
+    // nonexistent path). Map it into the taxonomy instead of leaking a bare Error,
+    // which Task 7's consumers would not recognize.
+    let backupId: string;
+    try {
+      backupId = createBackup(opts.files, backupsDir);
+    } catch (e) {
+      throw new ApplyPreconditionError(
+        `Refusing to apply: could not snapshot the target files — ${(e as Error).message}`
+      );
+    }
 
     // (c) Mutate, then verify. Either can trigger rollback.
     try {
       opts.mutate();
     } catch (e) {
-      rollback([`mutation threw: ${(e as Error).message}`], backupId, backupsDir);
+      rollbackAndThrow([`mutation threw: ${(e as Error).message}`], backupId, backupsDir);
     }
 
     const v = verifyConfigFile(opts.files[0], { baselineFails: baseline });
     if (!v.ok) {
-      rollback(v.reasons, backupId, backupsDir);
+      rollbackAndThrow(v.reasons, backupId, backupsDir);
     }
 
     // (d) Success — keep the change.

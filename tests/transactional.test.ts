@@ -4,6 +4,7 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
 } from "fs";
 import { join } from "path";
@@ -248,5 +249,72 @@ describe("transactionalApply", () => {
     expect(rf.message).toMatch(/inconsistent/i);
     // CFG was reverted; CFG2 was NOT — the inconsistency this error warns about.
     expect(readFileSync(CFG, "utf-8")).toBe(JSON.stringify(VALID));
+  });
+
+  it("maps a missing target file to ApplyPreconditionError, touching nothing", () => {
+    const original = writeValid();
+    const missing = join(DIR, "nope.json");
+    let mutated = false;
+    let err: unknown;
+    try {
+      transactionalApply({
+        files: [CFG, missing], // CFG parses (finite baseline) but CFG2 is absent
+        backupsDir: STORE,
+        mutate: () => {
+          mutated = true;
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ApplyPreconditionError);
+    expect(mutated).toBe(false);
+    expect(readFileSync(CFG, "utf-8")).toBe(original);
+    expect(listBackups(STORE)).toHaveLength(0);
+  });
+
+  it("surfaces RollbackFailedError (restored: [], failed: '') when the restore cannot even begin", () => {
+    writeValid();
+    let err: unknown;
+    try {
+      transactionalApply({
+        files: [CFG],
+        backupsDir: STORE,
+        mutate: () => {
+          // Corrupt CFG so verification fails and a rollback is attempted...
+          writeFileSync(CFG, "{corrupt");
+          // ...then delete the stored blob so restoreBackup's PREFLIGHT throws a
+          // plain Error (missing stored file) — NOT a PartialRestoreError. Nothing
+          // is committed back, so restored stays empty.
+          const gen = readdirSync(STORE)[0];
+          rmSync(join(STORE, gen, "openclaw.json"), { force: true });
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(RollbackFailedError);
+    const rf = err as RollbackFailedError;
+    expect(rf.restored).toEqual([]);
+    expect(rf.failed).toBe("");
+    expect(rf.reasons.length).toBeGreaterThan(0);
+    expect(rf.message.length).toBeGreaterThan(0);
+  });
+
+  it("rejects an empty files list with a clear (non-precondition) error before any lock/backup", () => {
+    let err: unknown;
+    try {
+      transactionalApply({
+        files: [],
+        backupsDir: STORE,
+        mutate: () => {},
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(ApplyPreconditionError);
+    expect((err as Error).message).toMatch(/at least one file/i);
+    expect(existsSync(LOCK)).toBe(false); // never acquired the lock
   });
 });
