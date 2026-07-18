@@ -529,6 +529,10 @@ program
   )
   .option("--dry-run", "Preview changes without applying")
   .option(
+    "--plan",
+    "Emit a persisted machine-readable plan as JSON on stdout (free, read-only)"
+  )
+  .option(
     "--profile <name>",
     "Optimization profile: minimal | balanced | aggressive",
     "balanced"
@@ -546,6 +550,33 @@ program
     "Target system: claude-code | openclaw (auto-detected if omitted)"
   )
   .action(async (opts) => {
+    if (opts.plan) {
+      // Free, read-only: no license check. Stdout carries pure JSON (the
+      // persisted plan, byte-for-byte); everything human goes to stderr.
+      printBanner(true);
+      const { buildPlan, savePlan } = await import("./optimizers/plan.js");
+      try {
+        const plan = buildPlan(opts.config, opts.profile);
+        const file = savePlan(plan);
+        console.error(chalk.dim(`  plan saved: ${file}\n`));
+        console.log(JSON.stringify(plan, null, 2));
+      } catch (err) {
+        console.log(
+          JSON.stringify(
+            {
+              error: "plan-failed",
+              message: (err as Error).message,
+              configPath: opts.config,
+            },
+            null,
+            2
+          )
+        );
+        process.exit(1);
+      }
+      return;
+    }
+
     const licensed = hasValidLicense();
     const effectiveDryRun = opts.dryRun || !licensed;
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, appendFileSync, rmSync } from "fs";
+import { mkdirSync, writeFileSync, appendFileSync, readFileSync, rmSync } from "fs";
+import { spawnSync } from "child_process";
 import { join } from "path";
 import { buildPlan, savePlan, loadPlan, configHashOf } from "../src/optimizers/plan.js";
 
@@ -87,4 +88,59 @@ describe("plan module", () => {
   it("buildPlan throws on an unknown profile", () => {
     expect(() => buildPlan(CFG, "turbo")).toThrow(/profile/i);
   });
+});
+
+describe("cli optimize --plan", () => {
+  const CLI = join(process.cwd(), "src", "cli.ts");
+
+  // HOME → test dir so defaultPlansDir() (and any license lookup) stays hermetic.
+  function runPlan(...args: string[]) {
+    return spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI, "optimize", "--plan", ...args],
+      { encoding: "utf-8", cwd: process.cwd(), env: { ...process.env, HOME: DIR } }
+    );
+  }
+
+  it("prints the persisted plan as pure JSON on stdout, banner on stderr", () => {
+    const r = runPlan("-c", CFG);
+    expect(r.status).toBe(0);
+    const plan = JSON.parse(r.stdout);
+    expect(plan.schemaVersion).toBe(1);
+    expect(plan.profile).toBe("balanced");
+    // stdout is exactly the persisted plan bytes (+ trailing newline)
+    const file = join(DIR, ".agent-optimizer", "plans", `${plan.planId}.json`);
+    expect(readFileSync(file, "utf-8")).toBe(JSON.stringify(plan, null, 2));
+    expect(r.stdout).toBe(JSON.stringify(plan, null, 2) + "\n");
+    expect(r.stderr).toContain("AGENT OPTIMIZER");
+  }, 30_000);
+
+  it("emits a structured JSON error for an unknown profile", () => {
+    const r = runPlan("-c", CFG, "--profile", "turbo");
+    expect(r.status).toBe(1);
+    const err = JSON.parse(r.stdout);
+    expect(err.error).toBe("plan-failed");
+    expect(err.message).toMatch(/profile/i);
+    expect(err.configPath).toBe(CFG);
+  }, 30_000);
+
+  it("emits a structured JSON error for a missing config", () => {
+    const missing = join(DIR, "no-such-config.json");
+    const r = runPlan("-c", missing);
+    expect(r.status).toBe(1);
+    const err = JSON.parse(r.stdout);
+    expect(err.error).toBe("plan-failed");
+    expect(err.message).toContain("Config not found");
+    expect(err.configPath).toBe(missing);
+  }, 30_000);
+
+  it("emits a structured JSON error for a syntactically invalid config", () => {
+    const broken = join(DIR, "broken.json");
+    writeFileSync(broken, "{ this is not json5 ][");
+    const r = runPlan("-c", broken);
+    expect(r.status).toBe(1);
+    const err = JSON.parse(r.stdout);
+    expect(err.error).toBe("plan-failed");
+    expect(err.configPath).toBe(broken);
+  }, 30_000);
 });
