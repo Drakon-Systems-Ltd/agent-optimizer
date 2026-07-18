@@ -28,27 +28,10 @@ import { auditToolsByProvider } from "./tools-by-provider.js";
 import { auditCompactionEngine } from "./compaction-engine.js";
 import { auditVisionModels } from "./vision-models.js";
 
-/**
- * Pure, config-only auditors: each takes ONLY the parsed config (no agentDir,
- * openclawVersion, filesystem, or network) and returns AuditResult[]. This is
- * the exact subset that is safe to run against a freshly-mutated, not-yet-trusted
- * config during post-apply verification (src/utils/apply-verify.ts).
- *
- * Inclusion criterion: signature is `(config: OpenClawConfig) => AuditResult[]`
- * with no side effects. ADD NEW PURE CONFIG-KEY AUDITORS HERE — apply-verify
- * imports this one list so verification can never silently under-check a new
- * hard-fail class (the dangerous, too-lenient direction).
- *
- * TODO(future): tag purity on the full runOpenClawAuditors registry below and
- * derive both this list and that one from a single source. A shared constant is
- * the right scope for now.
- */
-export const PURE_CONFIG_AUDITORS: ReadonlyArray<(config: OpenClawConfig) => AuditResult[]> = [
-  auditModelConfig,
-  auditLegacyConfigKeys,
-  auditToolsByProvider,
-  auditChannelSecurity,
-];
+// Re-exported so existing consumers can keep importing the name from here; the
+// definition lives in the leaf module ./pure-auditors.ts (no ora/chalk drag) so
+// apply-verify can import it without pulling in this CLI-layer module.
+export { PURE_CONFIG_AUDITORS } from "./pure-auditors.js";
 
 interface AuditorModule {
   name: string;

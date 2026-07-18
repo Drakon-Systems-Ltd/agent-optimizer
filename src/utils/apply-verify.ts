@@ -1,6 +1,6 @@
 import type { AuditResult, OpenClawConfig } from "../types.js";
 import { loadConfig, getConfigLoadIssues } from "./config.js";
-import { PURE_CONFIG_AUDITORS } from "../auditors/openclaw/index.js";
+import { PURE_CONFIG_AUDITORS } from "../auditors/openclaw/pure-auditors.js";
 
 export interface VerifyResult {
   ok: boolean;
