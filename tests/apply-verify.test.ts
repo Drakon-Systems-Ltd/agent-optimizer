@@ -53,6 +53,36 @@ describe("verifyConfigFile", () => {
     expect(r.ok).toBe(false);
     expect(r.fails).toBe(2);
     expect(r.reasons.length).toBeGreaterThan(0);
+    // Reason shape "<category> / <check>: <message>" is load-bearing for Task 6
+    // agent surfacing — pin it, not just non-emptiness.
+    expect(r.reasons.some((reason) => /^.+ \/ .+: .+/.test(reason))).toBe(true);
+    expect(
+      r.reasons.some((reason) => /^Model Config \/ thinkingDefault value: /.test(reason))
+    ).toBe(true);
+  });
+
+  it("fails (without throwing) when a malformed config makes an auditor throw", () => {
+    // fallbacks as an object (not array) makes auditModelConfig call
+    // {}.includes(...) → TypeError. A crash on the post-apply config is itself a
+    // verification failure; it must be caught, never propagated (else Task 6's
+    // `if (!ok) rollback` is bypassed and the broken config stays on disk).
+    write({ agents: { defaults: { model: { primary: "anthropic/claude-opus-4-8", fallbacks: {} } } } });
+    let r: ReturnType<typeof verifyConfigFile> | undefined;
+    expect(() => {
+      r = verifyConfigFile(CFG, { baselineFails: 0 });
+    }).not.toThrow();
+    expect(r!.ok).toBe(false);
+    expect(r!.fails).toBe(Infinity);
+  });
+
+  it("holds a config to a strict zero-fail bar when the baseline is non-finite", () => {
+    // countFails returns Infinity for an unusable pre-state; that must NOT
+    // green-light a broken post-state, because failEquiv > Infinity is always
+    // false. A non-finite baseline collapses to a strict zero-fail bar.
+    write({ agents: { defaults: { model: P, thinkingDefault: "nope" } } });
+    const r = verifyConfigFile(CFG, { baselineFails: Infinity });
+    expect(r.ok).toBe(false);
+    expect(r.fails).toBe(1);
   });
 
   it("trips on the unknown-keys warn alone (it counts as a fail)", () => {
