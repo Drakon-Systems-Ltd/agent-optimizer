@@ -9,7 +9,7 @@
     "properties": {
       "cliPath": {
         "type": "string",
-        "description": "Path or command for the agent-optimizer CLI (default: `agent-optimizer` on PATH)."
+        "description": "Path or command name of the agent-optimizer CLI — a SINGLE executable (default: `agent-optimizer` on PATH). It is run directly with shell:false, so it must be one path/command with NO arguments and NO shell syntax; the whole string (spaces included) is treated as the filename."
       }
     }
   },

@@ -105,13 +105,17 @@ async function invoke(args: string[], opts: RunOptions): Promise<RawRun | CliFai
         stderr: String(e.stderr ?? ""),
       };
     }
-    // Spawn failure (ENOENT = not installed), timeout, or abort.
+    // Spawn failure (ENOENT = not installed), buffer overflow, timeout, or abort.
+    // maxBuffer overflow ALSO sets `killed`, so it must be checked BEFORE the
+    // killed branch or it would be mislabelled a timeout.
     const message =
       e.code === "ENOENT"
         ? `agent-optimizer CLI not found (tried "${bin}"). Install it (npm i -g @drakon-systems/agent-optimizer) or set the plugin's cliPath config.`
-        : e.killed
-          ? `agent-optimizer ${args[0] ?? ""} was aborted or timed out.`
-          : (e.message ?? String(err));
+        : e.code === "ERR_CHILD_PROCESS_STDOUT_MAXBUFFER"
+          ? `agent-optimizer ${args[0] ?? ""} produced more than ${MAX_BUFFER} bytes on stdout (output buffer exceeded).`
+          : e.killed
+            ? `agent-optimizer ${args[0] ?? ""} was aborted or timed out.`
+            : (e.message ?? String(err));
     return {
       error: "cli-failed",
       message,
