@@ -24,6 +24,8 @@ import {
 } from "./licensing/index.js";
 import type { License, LicenseData } from "./licensing/index.js";
 import { emitPlanError } from "./utils/cli-json.js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -687,6 +689,102 @@ program
     const { exitCode } = runRollback({ config: opts.config, list: opts.list, to: opts.to });
     console.log();
     if (exitCode) process.exitCode = exitCode;
+  });
+
+// --- Plugin install (ship the OpenClaw plugin with one command) ---
+
+const plugin = program
+  .command("plugin")
+  .description("Manage the bundled Agent Optimizer OpenClaw plugin");
+
+plugin
+  .command("install")
+  .description("Install the bundled OpenClaw plugin into your extensions directory")
+  .option(
+    "--enable",
+    'Also enable it: add "agent-optimizer" to plugins.allow in your openclaw config (transactional, auto-rollback)'
+  )
+  .option(
+    "--extensions-dir <path>",
+    "OpenClaw extensions directory",
+    "~/.openclaw/extensions"
+  )
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json (only touched with --enable)",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (opts: { enable?: boolean; extensionsDir: string; config: string }) => {
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("plugin install\n"));
+
+    const { installPlugin, resolveBundledPluginDir, PluginSourceError } = await import(
+      "./plugin-install.js"
+    );
+    const { formatApplyError } = await import("./utils/apply-errors.js");
+
+    const bundledPluginDir = resolveBundledPluginDir(dirname(fileURLToPath(import.meta.url)));
+
+    const TOOLS =
+      "optimizer_audit, optimizer_plan, optimizer_apply, optimizer_rollback, optimizer_scan";
+
+    try {
+      const result = installPlugin({
+        bundledPluginDir,
+        extensionsDir: opts.extensionsDir,
+        enable: !!opts.enable,
+        configPath: opts.config,
+      });
+
+      console.log(chalk.green(`  ✓ Installed plugin → ${result.installedTo}`));
+      console.log(chalk.dim(`    files: ${result.files.join(", ")}`));
+
+      if (!opts.enable) {
+        console.log(chalk.bold("\n  Not yet enabled. To turn it on:"));
+        console.log(`    ${chalk.red("1.")} Add ${chalk.white('"agent-optimizer"')} to ${chalk.white("plugins.allow")} in ${chalk.dim(opts.config)}`);
+        console.log(`    ${chalk.red("2.")} Restart the gateway: ${chalk.dim("systemctl --user restart openclaw-gateway")}`);
+        console.log(chalk.dim("    Or let me do step 1 for you (transactional, auto-rollback):"));
+        console.log(`      ${chalk.white("agent-optimizer plugin install --enable")}`);
+        console.log(chalk.dim(`\n  Once enabled, 5 tools are available: ${TOOLS}`));
+        console.log(chalk.dim("  (optimizer_apply + optimizer_rollback are approval-gated: allow-once / deny)\n"));
+        return;
+      }
+
+      if (result.alreadyEnabled) {
+        console.log(
+          chalk.dim(
+            `\n  • Already enabled — "agent-optimizer" is in plugins.allow (${result.configPath}). No config change needed.`
+          )
+        );
+      } else {
+        console.log(
+          chalk.green(`\n  ✓ Enabled — added "agent-optimizer" to plugins.allow in ${result.configPath}`)
+        );
+        console.log(
+          chalk.dim(
+            `    backup: ${result.backupId}  (undo: agent-optimizer rollback --to ${result.backupId})`
+          )
+        );
+      }
+
+      console.log(chalk.bold("\n  Next steps:"));
+      console.log(chalk.dim("    • Restart the gateway: systemctl --user restart openclaw-gateway"));
+      console.log(chalk.dim(`    • 5 tools now available: ${TOOLS}`));
+      console.log(chalk.dim("    • optimizer_apply + optimizer_rollback are approval-gated (allow-once / deny)\n"));
+    } catch (err) {
+      if (err instanceof PluginSourceError) {
+        // Broken/absent bundled source (most often: dist not built) — actionable
+        // message, no transactional formatting.
+        console.log(chalk.red(`\n  ✗ ${err.message}\n`));
+        process.exitCode = 1;
+        return;
+      }
+      // A --enable failure came through transactionalApply — reuse the shared
+      // human formatting + exit code (identical to audit --fix / optimize apply).
+      const { text, exitCode } = formatApplyError(err);
+      console.log(text);
+      process.exitCode = exitCode;
+    }
   });
 
 // --- Snapshot & drift ---

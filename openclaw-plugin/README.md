@@ -53,6 +53,28 @@ npm run plugin:validate   # openclaw plugins validate --entry ./dist/index.js
 
 ## Install
 
+The plugin ships **inside** the `@drakon-systems/agent-optimizer` npm package, so
+the one-command install is the CLI's own `plugin install`. It copies the three
+loadable artifacts (`openclaw.plugin.json`, `package.json`, `dist/index.js` — no
+`node_modules`, since TypeBox is bundled and `openclaw/*` resolves against the
+host) into `~/.openclaw/extensions/agent-optimizer/`:
+
+```sh
+agent-optimizer plugin install            # copy the plugin into your extensions dir
+agent-optimizer plugin install --enable   # …and add "agent-optimizer" to plugins.allow (transactional)
+```
+
+`--enable` makes the `plugins.allow` edit **through agent-optimizer's transactional
+apply engine** (backup → verify → auto-rollback) and prints a backup id you can
+`rollback --to`. Then restart the gateway
+(`systemctl --user restart openclaw-gateway`). Until the id is in `plugins.allow`,
+`openclaw plugins inspect agent-optimizer` reports `Status: disabled` / "not in
+allowlist".
+
+### Manual (from a source checkout)
+
+Alternatively, build and symlink (or copy) the plugin yourself:
+
 1. Build (above) so `dist/index.js` exists.
 2. Symlink (or copy) the plugin into your extensions directory:
    ```sh
@@ -60,10 +82,8 @@ npm run plugin:validate   # openclaw plugins validate --entry ./dist/index.js
    openclaw plugins registry --refresh
    openclaw plugins list        # should show "Agent Optimizer  agent-optimizer  0.13.0"
    ```
-3. Enable it in your OpenClaw config allowlist (`~/.openclaw/openclaw.json`),
-   e.g. add `agent-optimizer` to `plugins.allow` (and/or `plugins.entries`),
-   then restart the gateway. Until it is allowlisted, `openclaw plugins inspect
-   agent-optimizer` reports `Status: disabled` / "not in allowlist".
+3. Enable it by adding `agent-optimizer` to `plugins.allow` in your OpenClaw
+   config (`~/.openclaw/openclaw.json`), then restart the gateway.
 
 ## Config
 

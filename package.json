@@ -8,11 +8,17 @@
   },
   "files": [
     "dist",
+    "openclaw-plugin/dist",
+    "openclaw-plugin/openclaw.plugin.json",
+    "openclaw-plugin/package.json",
+    "CHANGELOG.md",
     "LICENSE.md",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
+    "build:plugin": "cd openclaw-plugin && npm run build",
+    "prepack": "npm run build && npm run build:plugin",
     "dev": "tsx src/cli.ts",
     "test": "vitest",
     "lint": "eslint src/"
