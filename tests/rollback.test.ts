@@ -254,6 +254,7 @@ describe("runRollback — --json structured output", () => {
     const j = json as {
       schemaVersion: number;
       error: string;
+      backupId: string;
       restored: string[];
       failed: string;
       inconsistent: boolean;
@@ -261,6 +262,7 @@ describe("runRollback — --json structured output", () => {
     };
     expect(j.schemaVersion).toBe(1);
     expect(j.error).toBe("rollback-failed");
+    expect(j.backupId).toBe(id); // shape matches the non-partial branch + apply-plan
     expect(j.inconsistent).toBe(true);
     expect(j.restored).toContain(fileA);
     expect(j.failed).toBe(fileB);

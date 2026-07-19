@@ -236,6 +236,7 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
   if (selected.length === 0) {
     return {
       json: {
+        schemaVersion: 1,
         applied: [],
         note: "No applicable proposals to apply (info-only proposals are never applied).",
         planId,
@@ -290,12 +291,13 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
         // gateway sees; rename swaps it in whole (the store backup wraps this
         // for verify/rollback).
         const tmp = `${target}.tmp-${process.pid}`;
-        writeFileSync(tmp, JSON.stringify(config, null, 2));
+        writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
         renameSync(tmp, target);
       },
     });
     return {
       json: {
+        schemaVersion: 1,
         applied: selected.map((p) => p.id),
         planId,
         backupId: result.backupId,

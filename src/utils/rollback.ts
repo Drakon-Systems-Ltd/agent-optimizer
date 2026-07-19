@@ -126,7 +126,7 @@ export function runRollback(opts: RollbackOptions): RollbackResult {
       out(chalk.dim(`\n${RESTART}`));
       return { exitCode: 0 };
     } catch (e) {
-      if (e instanceof PartialRestoreError) return reportPartialRestore(e, out, json);
+      if (e instanceof PartialRestoreError) return reportPartialRestore(e, out, json, opts.to);
       // Unknown / invalid id → plain Error. Nothing was touched.
       if (json) {
         return {
@@ -157,7 +157,7 @@ export function runRollback(opts: RollbackOptions): RollbackResult {
       out(chalk.dim(`\n${RESTART}`));
       return { exitCode: 0 };
     } catch (e) {
-      if (e instanceof PartialRestoreError) return reportPartialRestore(e, out, json);
+      if (e instanceof PartialRestoreError) return reportPartialRestore(e, out, json, newest.id);
       // A valid, listed generation that still failed to restore (e.g. a stored
       // blob vanished) — nothing was committed, so not INCONSISTENT (exit 1). Same
       // slug family as apply-plan's rollback-failed, with `inconsistent` false.
@@ -187,16 +187,20 @@ export function runRollback(opts: RollbackOptions): RollbackResult {
 function reportPartialRestore(
   e: PartialRestoreError,
   out: (msg: string) => void,
-  json: boolean
+  json: boolean,
+  backupId: string
 ): RollbackResult {
   if (json) {
     // Aligned with the apply-plan (Task 8) taxonomy: slug "rollback-failed",
     // `inconsistent` true iff some files were reverted and at least one was not.
+    // `backupId` (the generation being restored) matches the non-partial branch
+    // and apply-plan's rollback-failed so the shape is identical across branches.
     return {
       exitCode: 2,
       json: {
         schemaVersion: 1,
         error: "rollback-failed",
+        backupId,
         restored: e.restored,
         failed: e.failed,
         inconsistent: e.restored.length > 0,

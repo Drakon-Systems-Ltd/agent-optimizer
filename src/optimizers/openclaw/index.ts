@@ -648,7 +648,7 @@ export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> 
         // reading gateway sees. rename swaps it in whole (the store backup still
         // wraps this for verify/rollback).
         const tmp = `${configPath}.tmp-${process.pid}`;
-        writeFileSync(tmp, JSON.stringify(config, null, 2));
+        writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
         renameSync(tmp, configPath);
       },
     });

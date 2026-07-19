@@ -149,6 +149,7 @@ describe("runApplyPlan — license + lookup guards", () => {
     });
     expect(r.exitCode).toBe(2);
     const j = r.json as Record<string, unknown>;
+    expect(j.schemaVersion).toBe(1); // error envelope carries the machine version too
     expect(j.error).toBe("plan-not-found");
     expect(j.planId).toBe("ffffffffffff");
   });
@@ -303,6 +304,7 @@ describe("runApplyPlan — selection", () => {
     });
     expect(r.exitCode).toBe(0);
     const j = r.json as Record<string, unknown>;
+    expect(j.schemaVersion).toBe(1); // the info-only no-op success is versioned too
     expect(j.applied).toEqual([]);
     expect(j.note).toMatch(/info-only/i);
     // No mutation and no backup — apply never ran.
@@ -328,6 +330,7 @@ describe("runApplyPlan — transactional apply", () => {
     });
     expect(r.exitCode).toBe(0);
     const j = r.json as Record<string, unknown>;
+    expect(j.schemaVersion).toBe(1); // success payload carries the machine version
     expect(j.applied).toEqual([ctx.id]);
     expect(j.planId).toBe(plan.planId); // the happy-path response is correlatable
     expect(j.backupId).toBeTruthy();
@@ -655,6 +658,7 @@ describe("cli optimize --apply-plan", () => {
     const r = runCli("optimize", "--apply-plan", p.planId, "--only", ctxId, "-c", CFG);
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout); // stdout is PURE JSON
+    expect(out.schemaVersion).toBe(1); // end-to-end: the emitted stdout is versioned
     expect(out.applied).toEqual([ctxId]);
     expect(out.planId).toBe(p.planId);
     expect(out.backupId).toBeTruthy();
@@ -698,6 +702,7 @@ describe("cli optimize --apply-plan", () => {
     const r = runCli("optimize", "--apply-plan", "ffffffffffff", "-c", CFG);
     expect(r.status).toBe(2);
     const out = JSON.parse(r.stdout);
+    expect(out.schemaVersion).toBe(1); // end-to-end: the emitted error stdout is versioned
     expect(out.error).toBe("plan-not-found");
     expect(out.planId).toBe("ffffffffffff");
   }, 30_000);

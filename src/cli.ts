@@ -728,9 +728,10 @@ program
     "~/.openclaw/openclaw.json"
   )
   .option("--name <name>", "Snapshot name to compare against", "golden")
+  .option("--json", "Output results as JSON")
   .action(async (opts) => {
-    printBanner();
-    console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
+    printBanner(!!opts.json);
+    if (!opts.json) console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
     const { detectDrift } = await import("./auditors/openclaw/config-drift.js");
     // Stamp ids/machineFixable so this report honours the schemaVersion:1 contract
     // (idful results) everywhere it is advertised, not just on `audit --json`.
