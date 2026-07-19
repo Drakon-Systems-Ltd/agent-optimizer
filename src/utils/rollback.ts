@@ -24,6 +24,12 @@ export interface RollbackOptions {
 
 const RESTART = "  Restart the gateway to apply: systemctl --user restart openclaw-gateway";
 
+// Pre-0.13.0 sidecar backups, newest-intent first (audit --fix wrote .pre-fix.bak,
+// optimize wrote .pre-optimize.bak). One source so the legacy-path builders agree.
+const SIDECAR_SUFFIXES = [".pre-fix.bak", ".pre-optimize.bak"] as const;
+const sidecarPaths = (configPath: string): string[] =>
+  SIDECAR_SUFFIXES.map((s) => `${configPath}${s}`);
+
 /**
  * Restore an OpenClaw config (and any co-snapshotted files) from the backup
  * store, with a fallback to the pre-0.13.0 `.pre-optimize.bak` / `.pre-fix.bak`
@@ -40,8 +46,7 @@ export function runRollback(opts: RollbackOptions): number {
   // Store generations whose manifest restores THIS config, newest-first.
   const generations = () =>
     listBackups(store).filter((b) => b.originalPaths.includes(configPath));
-  const legacySidecars = () =>
-    [`${configPath}.pre-fix.bak`, `${configPath}.pre-optimize.bak`].filter((p) => existsSync(p));
+  const legacySidecars = () => sidecarPaths(configPath).filter((p) => existsSync(p));
 
   // ── --list ──────────────────────────────────────────────────────────────
   if (opts.list) {
@@ -73,9 +78,19 @@ export function runRollback(opts: RollbackOptions): number {
   // ── --to <id> ───────────────────────────────────────────────────────────
   if (opts.to) {
     try {
+      // restored == the generation's manifest originalPaths. --to restores by id
+      // regardless of -c, but warn (don't fail) when it doesn't cover this config,
+      // mirroring --list's scoping so the user isn't surprised.
       const restored = restoreBackup(opts.to, store);
       out(chalk.green(`  ✓ Restored backup ${opts.to}`));
       for (const p of restored) out(chalk.dim(`  Restored: ${p}`));
+      if (!restored.includes(configPath)) {
+        out(
+          chalk.yellow(
+            `  ⚠ Note: this backup does not include ${configPath} — it restored a different config's file(s).`
+          )
+        );
+      }
       out(chalk.dim(`\n${RESTART}`));
       return 0;
     } catch (e) {
@@ -145,9 +160,7 @@ function legacyRollback(
   configArg: string,
   out: (msg: string) => void
 ): number {
-  const candidates = [`${configPath}.pre-fix.bak`, `${configPath}.pre-optimize.bak`].filter((p) =>
-    existsSync(p)
-  );
+  const candidates = sidecarPaths(configPath).filter((p) => existsSync(p));
   if (candidates.length === 0) {
     out(chalk.yellow("  No backup found."));
     out(

@@ -118,7 +118,8 @@ function printUpgradePrompt(feature: string): void {
 function printFixSummary(
   result: import("./fixers/index.js").FixApplyResult,
   manualCount: number,
-  out: (msg: string) => void = console.log
+  out: (msg: string) => void = console.log,
+  applySuccess?: (backupId: string) => string
 ): void {
   if (result.applied === 0) {
     out(chalk.dim("\n  No changes written (fixes were already applied or files unavailable)."));
@@ -141,15 +142,11 @@ function printFixSummary(
       out(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
     }
     // The backup generation snapshots every touched file (config + models.json),
-    // so a single `rollback` restores them all atomically.
-    if (result.backupId) {
-      out(chalk.dim(`\n  Backup: ${result.backupId}`));
+    // so a single restore brings them all back atomically. Shared footer keeps
+    // this identical to the optimize-apply success output.
+    if (result.backupId && applySuccess) {
+      out(applySuccess(result.backupId));
     }
-    out(chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-    out(
-      chalk.dim("  Something wrong? Rollback with: agent-optimizer rollback") +
-        (result.backupId ? chalk.dim(` (or --to ${result.backupId})`) : "")
-    );
   }
 
   if (manualCount > 0) {
@@ -463,6 +460,7 @@ program
       const { applyFixes, findingsWithFixes, autoFixableWithoutPayload } =
         await import("./fixers/index.js");
       const { loadConfig, findAgentDir } = await import("./utils/config.js");
+      const { formatApplyError, formatApplySuccess } = await import("./utils/apply-errors.js");
 
       const fixable = findingsWithFixes(results);
       const manual = autoFixableWithoutPayload(results);
@@ -479,11 +477,10 @@ program
       const agentDir = opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
       try {
         const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
-        printFixSummary(result, manual, out);
+        printFixSummary(result, manual, out, formatApplySuccess);
       } catch (err) {
         // The four transactionalApply errors (rolled-back / rollback-failed /
         // locked / precondition) get the shared human formatting + exit code.
-        const { formatApplyError } = await import("./utils/apply-errors.js");
         const { text, exitCode } = formatApplyError(err);
         out(text);
         process.exitCode = exitCode;

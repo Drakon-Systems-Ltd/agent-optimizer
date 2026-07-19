@@ -580,7 +580,7 @@ describe("runOpenClawOptimize — transactional apply", () => {
 
   it("applies, writes a store backup (not a sidecar), and leaves a clean config", async () => {
     writeFileSync(CFG, JSON.stringify(VALID, null, 2));
-    await runOpenClawOptimize({ config: CFG, profile: "aggressive" }, { backupsDir: STORE });
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
 
     // The change landed on disk.
     expect(JSON.parse(readFileSync(CFG, "utf-8")).agents.defaults.contextTokens).toBe(100000);
@@ -598,7 +598,7 @@ describe("runOpenClawOptimize — transactional apply", () => {
     // Valid JSON5 (comment) — parses via the JSON5 path, throws under strict JSON.
     const json5 = `{\n  // heavy context\n  "agents": { "defaults": { "model": { "primary": "anthropic/claude-opus-4-8", "fallbacks": ["openai/gpt-5.6"] }, "contextTokens": 1000000 } }\n}`;
     writeFileSync(CFG, json5);
-    await runOpenClawOptimize({ config: CFG, profile: "aggressive" }, { backupsDir: STORE });
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
 
     expect(logged()).toContain("JSON5");
     // The file is now plain JSON (the comment is gone) and reflects the change.
@@ -617,7 +617,7 @@ describe("runOpenClawOptimize — transactional apply", () => {
     mkdirSync(LOCK, { recursive: true });
     writeFileSync(join(LOCK, "lock.json"), JSON.stringify({ pid: 999999, startedAt: Date.now() }));
 
-    await runOpenClawOptimize({ config: CFG, profile: "aggressive" }, { backupsDir: STORE });
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
 
     // The optimizer caught the ApplyLockedError, formatted it, and set exit 1.
     expect(process.exitCode).toBe(1);
@@ -650,7 +650,7 @@ describe("runOpenClawOptimize — transactional apply", () => {
     // Deliberately unusual formatting (single line) so a re-serialize would change bytes.
     const original = JSON.stringify(onlyInfo);
     writeFileSync(CFG, original);
-    await runOpenClawOptimize({ config: CFG, profile: "aggressive" }, { backupsDir: STORE });
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
 
     // Byte-identical (no re-serialize) and no backup generation created.
     expect(readFileSync(CFG, "utf-8")).toBe(original);

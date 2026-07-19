@@ -34,19 +34,22 @@ export function formatApplyError(err: unknown): FormattedApplyError {
   }
 
   if (err instanceof RollbackFailedError) {
+    // restored>0: some originals were reverted, at least one was NOT → the disk
+    // is a mix (INCONSISTENT). restored===0: NOTHING was reverted, so the broken
+    // mutation is still live on disk — never say "was rolled back" here.
     const header =
       err.restored.length > 0
         ? chalk.red.bold(
             "\n  ✗ CRITICAL: the apply failed AND rollback left your files in an INCONSISTENT state. Manual repair needed."
           )
         : chalk.red.bold(
-            "\n  ✗ Apply failed and was rolled back, but the rollback itself errored."
+            "\n  ✗ Apply failed and the automatic rollback ALSO failed — nothing was reverted, so your config is still in the changed (possibly broken) state. Restore it with the command below."
           );
     const lines = [
       header,
       ...err.reasons.map((r) => chalk.red(`      • ${r}`)),
       chalk.red(`  backup id: ${err.backupId}`),
-      chalk.red(`  Retry the restore with: agent-optimizer rollback --to ${err.backupId}`),
+      chalk.red(`  Restore the original config with: agent-optimizer rollback --to ${err.backupId}`),
     ];
     return { text: lines.join("\n"), exitCode: 2 };
   }
@@ -76,4 +79,20 @@ export function formatApplyError(err: unknown): FormattedApplyError {
     text: chalk.red(`\n  ✗ Unexpected apply error: ${(err as Error).message ?? String(err)}`),
     exitCode: 1,
   };
+}
+
+/**
+ * Shared success footer for every writer that applies through transactionalApply
+ * (optimize apply, audit --fix, and — next — optimize --apply-plan): the backup
+ * id, the restart hint, and an always-correct restore pointer. It points at
+ * `rollback --to <id>` rather than a bare `rollback` on purpose — bare rollback
+ * resolves the DEFAULT config path and would miss a non-default `-c`, whereas the
+ * id is unambiguous. One source so the three (soon four) success sites can't drift.
+ */
+export function formatApplySuccess(backupId: string): string {
+  return [
+    chalk.dim(`\n  Backup: ${backupId}`),
+    chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway"),
+    chalk.dim(`  Something wrong? Restore with: agent-optimizer rollback --to ${backupId}`),
+  ].join("\n");
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatApplyError } from "../src/utils/apply-errors.js";
+import { formatApplyError, formatApplySuccess } from "../src/utils/apply-errors.js";
 import {
   ApplyLockedError,
   ApplyPreconditionError,
@@ -36,7 +36,7 @@ describe("formatApplyError", () => {
     expect(text).toContain("agent-optimizer rollback --to B2");
   });
 
-  it("RollbackFailedError with restored=[] → exit 2, 'rollback itself errored'", () => {
+  it("RollbackFailedError with restored=[] → exit 2, says config is STILL CHANGED (not rolled back)", () => {
     const err = new RollbackFailedError("x", {
       reasons: ["boom"],
       backupId: "B3",
@@ -45,9 +45,28 @@ describe("formatApplyError", () => {
     });
     const { text, exitCode } = formatApplyError(err);
     expect(exitCode).toBe(2);
-    expect(text).toContain("rollback itself errored");
+    // The correctness fix: nothing was reverted, so the config is still changed —
+    // the message must NOT imply the rollback recovered anything.
+    expect(text).toContain("nothing was reverted");
+    expect(text).toContain("still in the changed");
+    expect(text).not.toContain("was rolled back");
     expect(text).not.toContain("INCONSISTENT");
     expect(text).toContain("agent-optimizer rollback --to B3");
+  });
+
+  it("RollbackFailedError restored=[] vs restored=[...] produce distinct, accurate headers", () => {
+    const none = formatApplyError(
+      new RollbackFailedError("x", { reasons: [], backupId: "B", restored: [], failed: "" })
+    ).text;
+    const partial = formatApplyError(
+      new RollbackFailedError("x", { reasons: [], backupId: "B", restored: ["/a"], failed: "/b" })
+    ).text;
+    // restored=[]: still-changed wording, never INCONSISTENT.
+    expect(none).toContain("nothing was reverted");
+    expect(none).not.toContain("INCONSISTENT");
+    // restored=[...]: INCONSISTENT wording, never the still-changed phrasing.
+    expect(partial).toContain("INCONSISTENT");
+    expect(partial).not.toContain("nothing was reverted");
   });
 
   it("ApplyLockedError → exit 1, 'Another apply is already in progress'", () => {
@@ -67,5 +86,16 @@ describe("formatApplyError", () => {
     const { text, exitCode } = formatApplyError(new Error("kaboom"));
     expect(exitCode).toBe(1);
     expect(text).toContain("kaboom");
+  });
+});
+
+describe("formatApplySuccess", () => {
+  it("surfaces the backup id, restart hint, and an always-correct --to restore pointer", () => {
+    const text = formatApplySuccess("B9");
+    expect(text).toContain("Backup: B9");
+    expect(text).toContain("systemctl --user restart openclaw-gateway");
+    // Always-correct: points at `rollback --to <id>`, not a bare `rollback` that
+    // would resolve the default config path and miss a non-default -c.
+    expect(text).toContain("agent-optimizer rollback --to B9");
   });
 });

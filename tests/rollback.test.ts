@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, utimesSync } from "fs";
 import { join } from "path";
 import { createBackup } from "../src/utils/backups.js";
 import { runRollback } from "../src/utils/rollback.js";
@@ -60,6 +60,18 @@ describe("runRollback — store generations", () => {
     expect(text()).toContain("--list");
   });
 
+  it("--to warns (but still succeeds) when the generation does not include the -c config", () => {
+    const other = join(DIR, "other.json");
+    writeFileSync(other, V1);
+    const id = createBackup([other], STORE); // snapshots other.json, NOT CFG
+    writeFileSync(CFG, V2);
+    const code = runRollback({ config: CFG, to: id, backupsDir: STORE, out: sink });
+    expect(code).toBe(0);
+    expect(text()).toMatch(/does not include/i);
+    // It restored the other config; CFG was never in the generation, so untouched.
+    expect(readFileSync(CFG, "utf-8")).toBe(V2);
+  });
+
   it("--to with a traversal-shaped id is rejected", () => {
     writeFileSync(CFG, V1);
     const code = runRollback({ config: CFG, to: "../evil", backupsDir: STORE, out: sink });
@@ -94,11 +106,12 @@ describe("runRollback — legacy sidecar fallback", () => {
   it("prefers the newest sidecar (.pre-fix.bak over .pre-optimize.bak by mtime)", () => {
     writeFileSync(CFG, JSON.stringify({ drifted: true }));
     writeFileSync(`${CFG}.pre-optimize.bak`, V1);
-    // Ensure .pre-fix.bak is newer.
-    const later = Date.now();
     writeFileSync(`${CFG}.pre-fix.bak`, V2);
-    // Touch mtimes deterministically: rewrite pre-fix last so it wins.
-    void later;
+    // Set mtimes explicitly so the "newest wins" sort can't hit a same-ms tie:
+    // pre-optimize is older, pre-fix is newer and must be chosen.
+    const now = Date.now() / 1000;
+    utimesSync(`${CFG}.pre-optimize.bak`, now - 100, now - 100);
+    utimesSync(`${CFG}.pre-fix.bak`, now, now);
     const code = runRollback({ config: CFG, backupsDir: STORE, out: sink });
     expect(code).toBe(0);
     expect(readFileSync(CFG, "utf-8")).toBe(V2);

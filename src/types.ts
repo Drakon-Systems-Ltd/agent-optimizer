@@ -247,6 +247,10 @@ export interface OptimizeOptions {
   skip?: string[];
   /** Target system. Auto-detected via detectSystems() when omitted. */
   system?: "claude-code" | "openclaw";
+  /** Test-only injection: routes the transactional backup store to a temp dir so
+   *  applies stay hermetic. Flows through runOptimize → runOpenClawOptimize;
+   *  undefined (production) uses the real ~/.agent-optimizer store. */
+  backupsDir?: string;
 }
 
 export interface AuditOptions {

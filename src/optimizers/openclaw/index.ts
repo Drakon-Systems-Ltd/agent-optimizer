@@ -4,7 +4,7 @@ import { loadConfig, expandPath } from "../../utils/config.js";
 import { termWidth, wrap } from "../../utils/format.js";
 import { readFileSync, writeFileSync } from "fs";
 import { transactionalApply } from "../../utils/transactional.js";
-import { formatApplyError } from "../../utils/apply-errors.js";
+import { formatApplyError, formatApplySuccess } from "../../utils/apply-errors.js";
 import type { Optimization } from "../index.js";
 
 export const OPTIMIZATION_TAGS = [
@@ -525,12 +525,7 @@ function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
   obj[parts[parts.length - 1]] = opt.recommended;
 }
 
-export async function runOpenClawOptimize(
-  opts: OptimizeOptions,
-  // Test-only injection: routes the transactional backup store to a temp dir so
-  // applies stay hermetic. Defaults (undefined) to the real ~/.agent-optimizer.
-  applyOpts?: { backupsDir?: string }
-): Promise<void> {
+export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> {
   const config = loadConfig(opts.config);
   if (!config) {
     console.error(`Config not found: ${opts.config}`);
@@ -617,7 +612,7 @@ export async function runOpenClawOptimize(
   try {
     const result = transactionalApply({
       files: [configPath],
-      backupsDir: applyOpts?.backupsDir,
+      backupsDir: opts.backupsDir,
       mutate: () => {
         for (const opt of applicable) applyOptimization(config, opt);
         writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -628,10 +623,7 @@ export async function runOpenClawOptimize(
     if (skippedInfo > 0) {
       console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
     }
-    console.log(chalk.dim(`Backup: ${result.backupId}`));
-    console.log(chalk.dim("Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-    console.log(chalk.dim("Something wrong? Rollback with: agent-optimizer rollback"));
-    console.log(chalk.dim(`  (or a specific one: agent-optimizer rollback --to ${result.backupId})`));
+    console.log(formatApplySuccess(result.backupId));
   } catch (err) {
     const { text, exitCode } = formatApplyError(err);
     console.log(text);
