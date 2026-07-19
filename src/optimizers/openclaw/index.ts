@@ -2,7 +2,7 @@ import chalk from "chalk";
 import type { OptimizeOptions, OpenClawConfig } from "../../types.js";
 import { loadConfig, expandPath } from "../../utils/config.js";
 import { termWidth, wrap } from "../../utils/format.js";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, renameSync } from "fs";
 import { transactionalApply } from "../../utils/transactional.js";
 import { formatApplyError, formatApplySuccess } from "../../utils/apply-errors.js";
 import type { Optimization } from "../index.js";
@@ -615,7 +615,13 @@ export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> 
       backupsDir: opts.backupsDir,
       mutate: () => {
         for (const opt of applicable) applyOptimization(config, opt);
-        writeFileSync(configPath, JSON.stringify(config, null, 2));
+        // Atomic (temp + rename), matching applyFixes/savePlan/backups: an
+        // interrupted direct write could truncate the live config a concurrently
+        // reading gateway sees. rename swaps it in whole (the store backup still
+        // wraps this for verify/rollback).
+        const tmp = `${configPath}.tmp-${process.pid}`;
+        writeFileSync(tmp, JSON.stringify(config, null, 2));
+        renameSync(tmp, configPath);
       },
     });
 
