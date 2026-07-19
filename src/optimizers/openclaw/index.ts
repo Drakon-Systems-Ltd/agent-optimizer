@@ -6,6 +6,9 @@ import { readFileSync, writeFileSync, renameSync } from "fs";
 import { transactionalApply } from "../../utils/transactional.js";
 import { formatApplyError, formatApplySuccess } from "../../utils/apply-errors.js";
 import type { Optimization } from "../index.js";
+// Type-only — erased at compile time, so no runtime import cycle with plan.ts
+// (which imports getOptimizations/PROFILE_NAMES from this module).
+import type { PlanProposal } from "../plan.js";
 
 export const OPTIMIZATION_TAGS = [
   "context",
@@ -511,8 +514,13 @@ export function getOptimizations(
   return opts;
 }
 
-function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
-  const parts = opt.path.split(".");
+/**
+ * Walk a dotted config path, creating intermediate objects as needed, and set
+ * the leaf to `value`. The single shared mutation primitive so applying a live
+ * optimization and applying a stored plan proposal touch the config identically.
+ */
+function setConfigPath(config: OpenClawConfig, path: string, value: unknown): void {
+  const parts = path.split(".");
   let obj: Record<string, unknown> = config as Record<string, unknown>;
 
   for (let i = 0; i < parts.length - 1; i++) {
@@ -522,7 +530,27 @@ function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
     obj = obj[parts[i]] as Record<string, unknown>;
   }
 
-  obj[parts[parts.length - 1]] = opt.recommended;
+  obj[parts[parts.length - 1]] = value;
+}
+
+function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
+  setConfigPath(config, opt.path, opt.recommended);
+}
+
+/**
+ * Apply a set of plan proposals to a config IN PLACE: set each proposal's `path`
+ * to its STORED `recommended` value, verbatim. We never recompute the value from
+ * the current config — the caller's staleness guard (a configHash match) has
+ * already proven the config hasn't drifted since the plan was generated, so the
+ * plan's recommendations are still the right ones. Uses the same path-walk as
+ * applyOptimization. Info-only proposals must be filtered out by the caller —
+ * they are suggestions and are never applied.
+ */
+export function applyProposals(
+  config: OpenClawConfig,
+  proposals: Pick<PlanProposal, "path" | "recommended">[]
+): void {
+  for (const p of proposals) setConfigPath(config, p.path, p.recommended);
 }
 
 export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> {

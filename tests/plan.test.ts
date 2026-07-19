@@ -98,7 +98,14 @@ describe("cli optimize --plan", () => {
     return spawnSync(
       process.execPath,
       ["--import", "tsx", CLI, "optimize", "--plan", ...args],
-      { encoding: "utf-8", cwd: process.cwd(), env: { ...process.env, HOME: DIR } }
+      {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+        env: { ...process.env, HOME: DIR },
+        // A hung CLI must fail fast (SIGKILL) rather than stall CI.
+        timeout: 20000,
+        killSignal: "SIGKILL",
+      }
     );
   }
 

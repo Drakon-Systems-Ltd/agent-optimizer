@@ -22,6 +22,7 @@ import {
   PRICING,
 } from "./licensing/index.js";
 import type { License, LicenseData } from "./licensing/index.js";
+import { emitPlanError } from "./utils/cli-json.js";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -535,13 +536,19 @@ program
     "Emit a persisted machine-readable plan as JSON on stdout (free, read-only)"
   )
   .option(
+    "--apply-plan <id>",
+    "Apply a persisted plan by id, transactionally, with a config-drift guard (licensed, mutates). Pure JSON on stdout. In this mode --only selects PROPOSAL IDS, not tags."
+  )
+  .option(
     "--profile <name>",
     "Optimization profile: minimal | balanced | aggressive",
     "balanced"
   )
   .option(
+    // Mode-dependent: in the normal optimize path these are TAGS; with
+    // --apply-plan they are PROPOSAL IDS (e.g. p1-context,p3-heartbeat).
     "--only <tags>",
-    "Only apply these optimizations (comma-separated: context,heartbeat,subagents,compaction,pruning)"
+    "Only apply these optimizations (comma-separated tags: context,heartbeat,subagents,compaction,pruning). With --apply-plan: comma-separated PROPOSAL IDS instead."
   )
   .option(
     "--skip <tags>",
@@ -563,19 +570,29 @@ program
         console.error(chalk.dim(`  plan saved: ${file}\n`));
         console.log(JSON.stringify(plan, null, 2));
       } catch (err) {
-        console.log(
-          JSON.stringify(
-            {
-              error: "plan-failed",
-              message: (err as Error).message,
-              configPath: opts.config,
-            },
-            null,
-            2
-          )
-        );
+        // Shared envelope so --plan and --apply-plan errors read identically.
+        emitPlanError("plan-failed", (err as Error).message, { configPath: opts.config });
         process.exit(1);
       }
+      return;
+    }
+
+    if (opts.applyPlan) {
+      // Apply-plan is the agent-facing MACHINE path: pure JSON on stdout, banner
+      // and any human text to stderr — exactly like --plan. It MUTATES, so it is
+      // license-gated (runApplyPlan enforces this via the injected `licensed`).
+      printBanner(true);
+      const { runApplyPlan } = await import("./optimizers/apply-plan.js");
+      const { json, exitCode } = runApplyPlan({
+        config: opts.config,
+        applyPlan: opts.applyPlan,
+        // Raw --only string: in apply-plan mode these are PROPOSAL IDS, not tags.
+        // runApplyPlan splits/validates them against the plan.
+        only: opts.only,
+        licensed: !!hasValidLicense(),
+      });
+      console.log(JSON.stringify(json, null, 2));
+      if (exitCode !== 0) process.exit(exitCode);
       return;
     }
 
