@@ -55,7 +55,7 @@ program
       d("  LICENSED") + d(" (Solo £29+)"),
       `    ${w("audit --fix")}                              ${d("Auto-apply safe fixes")}`,
       `    ${w("optimize")} ${d("[--profile] [--only] [--skip]")}   ${d("Apply optimizations")}`,
-      `    ${w("rollback")}                                 ${d("Restore pre-optimize backup")}`,
+      `    ${w("rollback")} ${d("[--list] [--to <id>]")}              ${d("Restore a backup generation")}`,
       "",
       d("  FLEET") + d(" (£79+)"),
       `    ${w("fleet")} ${d("--hosts a,b,c [--json]")}             ${d("SSH fleet audit")}`,
@@ -139,13 +139,17 @@ function printFixSummary(
     );
     for (const f of result.files) {
       out(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
-      out(chalk.dim(`      backup: ${f.backup}`));
-      out(chalk.dim(`      undo:   cp "${f.backup}" "${f.file}"`));
     }
-    // `rollback` restores the openclaw.json only; per-file cp commands above cover
-    // every touched file (including models.json), so point users there.
-    out(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-    out(chalk.dim("  Undo: run the per-file cp command(s) above, or `agent-optimizer rollback` for the config."));
+    // The backup generation snapshots every touched file (config + models.json),
+    // so a single `rollback` restores them all atomically.
+    if (result.backupId) {
+      out(chalk.dim(`\n  Backup: ${result.backupId}`));
+    }
+    out(chalk.dim("  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
+    out(
+      chalk.dim("  Something wrong? Rollback with: agent-optimizer rollback") +
+        (result.backupId ? chalk.dim(` (or --to ${result.backupId})`) : "")
+    );
   }
 
   if (manualCount > 0) {
@@ -458,7 +462,7 @@ program
       const out = opts.json ? console.error : console.log;
       const { applyFixes, findingsWithFixes, autoFixableWithoutPayload } =
         await import("./fixers/index.js");
-      const { loadConfig, findAgentDir, expandPath } = await import("./utils/config.js");
+      const { loadConfig, findAgentDir } = await import("./utils/config.js");
 
       const fixable = findingsWithFixes(results);
       const manual = autoFixableWithoutPayload(results);
@@ -473,15 +477,16 @@ program
 
       const config = loadConfig(opts.config);
       const agentDir = opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
-      const configFull = expandPath(opts.config);
       try {
         const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
         printFixSummary(result, manual, out);
       } catch (err) {
-        out(chalk.red(`\n  ✗ Fix application failed partway: ${(err as Error).message}`));
-        out(chalk.dim("  Any file already written has a .pre-fix.bak alongside it — restore with:"));
-        out(chalk.dim(`    cp "${configFull}.pre-fix.bak" "${configFull}"`));
-        process.exitCode = 1;
+        // The four transactionalApply errors (rolled-back / rollback-failed /
+        // locked / precondition) get the shared human formatting + exit code.
+        const { formatApplyError } = await import("./utils/apply-errors.js");
+        const { text, exitCode } = formatApplyError(err);
+        out(text);
+        process.exitCode = exitCode;
       }
     }
   });
@@ -614,86 +619,22 @@ program
 
 program
   .command("rollback")
-  .description("Restore config from the last optimize/fix backup")
+  .description("Restore config from a backup generation (store, with legacy sidecar fallback)")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
     "~/.openclaw/openclaw.json"
   )
+  .option("--list", "List the backup generations that touch this config")
+  .option("--to <id>", "Restore a specific backup generation by id")
   .action(async (opts) => {
-    const { existsSync, copyFileSync, readFileSync, statSync } = await import("fs");
-    const { expandPath } = await import("./utils/config.js");
-
-    const configPath = expandPath(opts.config);
-    // Restore from whichever backup is newest: optimize writes .pre-optimize.bak,
-    // `audit --fix` writes .pre-fix.bak.
-    const candidates = [`${configPath}.pre-fix.bak`, `${configPath}.pre-optimize.bak`].filter(
-      (p) => existsSync(p)
-    );
-
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("rollback\n"));
 
-    if (candidates.length === 0) {
-      console.log(chalk.yellow("  No backup found."));
-      console.log(chalk.dim(`  Expected: ${configPath}.pre-optimize.bak or ${configPath}.pre-fix.bak`));
-      console.log(chalk.dim("  Backups are created automatically by: agent-optimizer optimize  /  agent-optimizer audit --fix\n"));
-      process.exit(1);
-    }
-
-    const backupPath = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
-
-    // Show what's different
-    try {
-      const current = JSON.parse(readFileSync(configPath, "utf-8"));
-      const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
-
-      const currentCtx = current.agents?.defaults?.contextTokens;
-      const backupCtx = backup.agents?.defaults?.contextTokens;
-      const currentHb = current.agents?.defaults?.heartbeat?.every;
-      const backupHb = backup.agents?.defaults?.heartbeat?.every;
-
-      if (currentCtx !== backupCtx || currentHb !== backupHb) {
-        console.log("  Changes that will be reverted:");
-        if (currentCtx !== backupCtx) {
-          console.log(`    contextTokens: ${currentCtx} → ${backupCtx}`);
-        }
-        if (currentHb !== backupHb) {
-          console.log(`    heartbeat: ${currentHb} → ${backupHb}`);
-        }
-        console.log();
-      }
-    } catch {
-      // Can't diff — just restore
-    }
-
-    // Restore the config
-    copyFileSync(backupPath, configPath);
-    console.log(chalk.green("  ✓ Config restored from backup"));
-    console.log(chalk.dim(`  Restored: ${configPath}`));
-    console.log(chalk.dim(`  From:     ${backupPath}`));
-
-    // `audit --fix` can also edit models.json — restore its backup too so the
-    // undo is complete (the fix summary's "rollback" pointer stays honest).
-    try {
-      const { resolve } = await import("path");
-      const { loadConfig, findAgentDir } = await import("./utils/config.js");
-      const restored = loadConfig(opts.config);
-      const agentDir = restored ? findAgentDir(restored) : null;
-      if (agentDir) {
-        const modelsPath = resolve(expandPath(agentDir), "models.json");
-        const modelsBackup = `${modelsPath}.pre-fix.bak`;
-        if (existsSync(modelsBackup)) {
-          copyFileSync(modelsBackup, modelsPath);
-          console.log(chalk.green("  ✓ models.json restored from backup"));
-          console.log(chalk.dim(`  Restored: ${modelsPath}`));
-        }
-      }
-    } catch {
-      // models.json restore is best-effort — the config restore already succeeded.
-    }
-
-    console.log(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
+    const { runRollback } = await import("./utils/rollback.js");
+    const code = runRollback({ config: opts.config, list: opts.list, to: opts.to });
+    console.log();
+    if (code) process.exitCode = code;
   });
 
 // --- Snapshot & drift ---

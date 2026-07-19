@@ -1,11 +1,11 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { resolve } from "path";
 import { expandPath } from "../utils/config.js";
+import { transactionalApply } from "../utils/transactional.js";
 import type { AuditReport, AuditResult, FixOperation } from "../types.js";
 
 export interface FileFixResult {
   file: string; // absolute path of the file written (or that would be written in dry-run)
-  backup: string; // absolute path of the .pre-fix.bak backup
   opsApplied: number;
 }
 
@@ -15,9 +15,10 @@ export interface FixApplyResult {
   skipped: number; // autoFixable findings WITHOUT a machine-applicable payload
   files: FileFixResult[]; // one entry per file actually changed
   dryRun: boolean;
+  // Id of the transactional backup generation that snapshots every touched file.
+  // undefined in dry-run and when no file actually changed (nothing was written).
+  backupId?: string;
 }
-
-const BACKUP_SUFFIX = ".pre-fix.bak";
 
 type Json = Record<string, unknown>;
 
@@ -117,13 +118,23 @@ export interface ApplyFixesOpts {
   configPath: string; // the openclaw.json path passed via -c
   agentDir: string; // agent directory; models.json is resolved within it
   dryRun?: boolean;
+  // Test-only injection: routes the transactional backup store to a temp dir so
+  // fixes stay hermetic. Defaults (undefined) to the real ~/.agent-optimizer.
+  backupsDir?: string;
 }
 
 /**
- * Apply every machine-applicable fix in the report. Operations are grouped by
- * target file; each touched file is backed up to <file>.pre-fix.bak before being
- * written. In dry-run mode nothing is written but the change counts are computed
- * against an in-memory copy.
+ * Apply every machine-applicable fix in the report. Two passes:
+ *
+ *  1. In-memory: group ops by target file, parse each existing target, apply the
+ *     ops, and compute what changed. Nothing touches disk here.
+ *  2. Transactional: hand every pending write to transactionalApply, which
+ *     snapshots the files into the multi-generation backup store, performs the
+ *     atomic writes, verifies the openclaw config, and AUTO-ROLLS-BACK on
+ *     failure. Its typed errors PROPAGATE — the CLI formats them.
+ *
+ * In dry-run mode nothing is written and no backup is taken, but the change
+ * counts are still computed against the in-memory copies.
  */
 export function applyFixes(report: AuditReport, opts: ApplyFixesOpts): FixApplyResult {
   const dryRun = !!opts.dryRun;
@@ -144,8 +155,10 @@ export function applyFixes(report: AuditReport, opts: ApplyFixesOpts): FixApplyR
   }
 
   const files: FileFixResult[] = [];
+  const writes: { file: string; content: string }[] = [];
   let applied = 0;
 
+  // Pass 1 — compute the pending writes in memory (config first, then models).
   for (const target of ["config", "models"] as const) {
     const ops = opsByTarget[target];
     if (ops.length === 0) continue;
@@ -167,20 +180,38 @@ export function applyFixes(report: AuditReport, opts: ApplyFixesOpts): FixApplyR
     }
     if (changed === 0) continue;
 
-    const backup = `${file}${BACKUP_SUFFIX}`;
-    if (!dryRun) {
-      // Never clobber an existing backup: the first one holds the pristine
-      // pre-fix original, which is the only artifact that can undo repeated runs.
-      if (!existsSync(backup)) copyFileSync(file, backup);
-      // Write atomically (temp + rename) so a crash mid-write can never leave a
-      // truncated config — the original stays intact until rename swaps it in.
-      const tmp = `${file}.tmp-${process.pid}`;
-      writeFileSync(tmp, JSON.stringify(json, null, 2) + "\n");
-      renameSync(tmp, file);
-    }
-    files.push({ file, backup, opsApplied: changed });
+    files.push({ file, opsApplied: changed });
+    writes.push({ file, content: JSON.stringify(json, null, 2) + "\n" });
     applied += changed;
   }
 
-  return { applied, findings: findings.length, skipped, files, dryRun };
+  // Dry-run, or nothing actually changed — return without writing or backing up.
+  if (dryRun || writes.length === 0) {
+    return { applied, findings: findings.length, skipped, files, dryRun, backupId: undefined };
+  }
+
+  // Pass 2 — transactional write. transactionalApply verifies files[0], which
+  // MUST be the openclaw config, so anchor the list on it (even if only
+  // models.json changed): the snapshot then captures a consistent config+models
+  // pair, and the config is the file that gets post-mutation verification.
+  const filesToSnapshot = [
+    configFile,
+    ...writes.map((w) => w.file).filter((f) => f !== configFile),
+  ];
+
+  const result = transactionalApply({
+    files: filesToSnapshot,
+    backupsDir: opts.backupsDir,
+    mutate: () => {
+      // Atomic (temp + rename) per file so a crash mid-write can never leave a
+      // truncated target — the original stays intact until rename swaps it in.
+      for (const w of writes) {
+        const tmp = `${w.file}.tmp-${process.pid}`;
+        writeFileSync(tmp, w.content);
+        renameSync(tmp, w.file);
+      }
+    },
+  });
+
+  return { applied, findings: findings.length, skipped, files, dryRun, backupId: result.backupId };
 }
