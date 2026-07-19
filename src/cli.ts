@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
+import { stampFindingIds } from "./utils/finding-id.js";
 import { generateReport, printBanner, printScanResults } from "./reporters/index.js";
 import {
   enrollMonitor,
@@ -702,7 +703,9 @@ program
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
     const { detectDrift } = await import("./auditors/openclaw/config-drift.js");
-    const results = detectDrift(opts.config, opts.name);
+    // Stamp ids/machineFixable so this report honours the schemaVersion:1 contract
+    // (idful results) everywhere it is advertised, not just on `audit --json`.
+    const results = stampFindingIds(detectDrift(opts.config, opts.name));
     generateReport(
       {
         schemaVersion: 1,

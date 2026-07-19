@@ -7,8 +7,9 @@ import {
   isMachineFixable,
   stampFindingIds,
 } from "../src/utils/finding-id.js";
+import { findingsWithFixes } from "../src/fixers/index.js";
 import { runFullAudit } from "../src/auditors/index.js";
-import type { AuditResult } from "../src/types.js";
+import type { AuditReport, AuditResult } from "../src/types.js";
 
 describe("slugifyFinding", () => {
   it("produces the documented kebab slug for the reference example", () => {
@@ -120,10 +121,22 @@ describe("stampFindingIds", () => {
     ]);
   });
 
-  it("keeps ids unique within a report", () => {
-    const dup: AuditResult = { category: "X", check: "y", status: "info", message: "m" };
-    const ids = stampFindingIds([dup, { ...dup }, { ...dup }]).map((r) => r.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it("keeps ids unique even when a base slug equals another's suffixed form", () => {
+    // Real config-interpolated checks collide this way. slugs here:
+    //   "b 2" -> "c-b-2",  "b" -> "c-b",  "b" -> "c-b".
+    // Deduping on the base slug alone would hand the 3rd result "c-b-2",
+    // colliding with the 1st. Deduping on the FINAL id must skip to "c-b-3".
+    const mk = (check: string): AuditResult => ({ category: "C", check, status: "warn", message: check });
+    const ids = stampFindingIds([mk("b 2"), mk("b"), mk("b")]).map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length); // truly unique
+    expect(ids).toEqual(["c-b-2", "c-b", "c-b-3"]);
+  });
+
+  it("falls back to a non-empty, still-unique id when the slug would be empty", () => {
+    const mk = (): AuditResult => ({ category: "!!", check: "??", status: "info", message: "m" });
+    const ids = stampFindingIds([mk(), mk()]).map((r) => r.id);
+    expect(ids).toEqual(["finding", "finding-2"]);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("is deterministic on re-run with the same input order", () => {
@@ -151,6 +164,33 @@ describe("stampFindingIds", () => {
     const [sf, sp] = stampFindingIds([fixable, plain]);
     expect(sf.machineFixable).toBe(true);
     expect(sp.machineFixable).toBe(false);
+  });
+});
+
+// The whole point of the shared predicate: the set `audit --fix` acts on
+// (findingsWithFixes) must equal the set an agent would offer to fix by reading
+// the stamped `machineFixable` flag. Lock it so the two can never drift.
+describe("no-drift invariant — findingsWithFixes vs machineFixable flag", () => {
+  it("findingsWithFixes(report) equals results.filter((r) => r.machineFixable)", () => {
+    const stamped = stampFindingIds([
+      fixable,
+      noPayload,
+      emptyApply,
+      plain,
+      { ...fixable, check: "another dup" },
+    ]);
+    const report: AuditReport = {
+      schemaVersion: 1,
+      timestamp: "t",
+      host: "h",
+      systems: [],
+      openclawVersion: "x",
+      results: stamped,
+      summary: { total: stamped.length, pass: 0, warn: 0, fail: 0 },
+    };
+    const byFlag = report.results.filter((r) => r.machineFixable);
+    expect(byFlag.length).toBeGreaterThan(0); // non-trivial: fixtures include fixables
+    expect(findingsWithFixes(report)).toEqual(byFlag); // cannot drift
   });
 });
 

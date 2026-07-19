@@ -35,18 +35,23 @@ export function isMachineFixable(r: AuditResult): boolean {
  * Return a new array where every result carries a stable `id` and an explicit
  * `machineFixable` flag. Inputs are not mutated.
  *
- * The id is the category/check slug. When two findings slugify to the same base,
- * the first keeps the bare slug and each subsequent collision is suffixed `-2`,
- * `-3`, … so ids are unique within a single report. Deterministic given input
- * order.
+ * The id is the category/check slug. The first result with a given slug keeps it
+ * bare; any later result whose id would collide is suffixed `-2`, `-3`, … until
+ * free. Dedup is on the FINAL assigned id, not the bare slug — otherwise a base
+ * slug could equal an earlier result's suffixed id (config-interpolated checks
+ * like "b" vs "b 2" both slugify into that space) and produce a duplicate. An
+ * empty slug (all-punctuation category+check) falls back to "finding". Ids are
+ * therefore unique within a report and deterministic given input order.
  */
-export function stampFindingIds(results: AuditResult[]): AuditResult[] {
-  const seen = new Map<string, number>();
+export function stampFindingIds(
+  results: AuditResult[],
+): Array<AuditResult & { id: string; machineFixable: boolean }> {
+  const used = new Set<string>();
   return results.map((r) => {
-    const base = slugifyFinding(r.category, r.check);
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-    const id = count === 1 ? base : `${base}-${count}`;
+    const base = slugifyFinding(r.category, r.check) || "finding";
+    let id = base;
+    for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+    used.add(id);
     return { ...r, id, machineFixable: isMachineFixable(r) };
   });
 }
