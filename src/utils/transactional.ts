@@ -50,8 +50,9 @@ export class ApplyLockedError extends Error {
   }
 }
 
-/** The pre-apply config is already unusable (non-finite baseline). We refuse to
- *  back up or mutate a config we cannot trust — the user must fix it first. */
+/** The apply cannot safely begin — either the pre-apply config is unusable
+ *  (non-finite baseline) or the target files could not be snapshotted. In all
+ *  cases the originals are untouched and mutate has not run. */
 export class ApplyPreconditionError extends Error {
   constructor(message: string) {
     super(message);

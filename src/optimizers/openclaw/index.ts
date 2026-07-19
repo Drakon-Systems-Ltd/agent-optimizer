@@ -2,7 +2,9 @@ import chalk from "chalk";
 import type { OptimizeOptions, OpenClawConfig } from "../../types.js";
 import { loadConfig, expandPath } from "../../utils/config.js";
 import { termWidth, wrap } from "../../utils/format.js";
-import { writeFileSync, copyFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
+import { transactionalApply } from "../../utils/transactional.js";
+import { formatApplyError } from "../../utils/apply-errors.js";
 import type { Optimization } from "../index.js";
 
 export const OPTIMIZATION_TAGS = [
@@ -523,7 +525,12 @@ function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
   obj[parts[parts.length - 1]] = opt.recommended;
 }
 
-export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> {
+export async function runOpenClawOptimize(
+  opts: OptimizeOptions,
+  // Test-only injection: routes the transactional backup store to a temp dir so
+  // applies stay hermetic. Defaults (undefined) to the real ~/.agent-optimizer.
+  applyOpts?: { backupsDir?: string }
+): Promise<void> {
   const config = loadConfig(opts.config);
   if (!config) {
     console.error(`Config not found: ${opts.config}`);
@@ -575,25 +582,59 @@ export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> 
     return;
   }
 
-  // Backup
   const configPath = expandPath(opts.config);
-  const backupPath = `${configPath}.pre-optimize.bak`;
-  copyFileSync(configPath, backupPath);
-  console.log(chalk.dim(`\nBackup: ${backupPath}`));
 
-  // Apply — info-only entries are suggestions, never auto-written
+  // Apply — info-only entries are suggestions, never auto-written.
   const applicable = optimizations.filter((o) => !o.info);
   const skippedInfo = optimizations.length - applicable.length;
 
-  for (const opt of applicable) {
-    applyOptimization(config, opt);
+  // Nothing applicable (only info-only suggestions) — don't rewrite the file at
+  // all. A no-op rewrite would needlessly re-serialize (and strip any JSON5
+  // comments from) a config we aren't actually changing.
+  if (applicable.length === 0) {
+    console.log(chalk.green("\n✓ No applicable optimizations to write"));
+    if (skippedInfo > 0) {
+      console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+    }
+    return;
   }
 
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(chalk.green(`\n✓ Applied ${applicable.length} optimization(s)`));
-  if (skippedInfo > 0) {
-    console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+  // JSON5-rewrite detection: OpenClaw configs may use JSON5 (comments, trailing
+  // commas). We write plain JSON, so warn the user their original formatting is
+  // rewritten — the backup preserves the original bytes. Never blocks the apply.
+  try {
+    JSON.parse(readFileSync(configPath, "utf-8"));
+  } catch {
+    console.log(
+      chalk.yellow(
+        "\n⚠ Source config uses JSON5 comments/formatting — apply rewrites it as plain JSON. The backup preserves the original."
+      )
+    );
   }
-  console.log(chalk.dim("Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-  console.log(chalk.dim("Something wrong? Rollback with: agent-optimizer rollback"));
+
+  // Route through the transactional engine: snapshot → mutate → verify →
+  // auto-rollback on failure. The store IS the backup now (no more sidecar).
+  try {
+    const result = transactionalApply({
+      files: [configPath],
+      backupsDir: applyOpts?.backupsDir,
+      mutate: () => {
+        for (const opt of applicable) applyOptimization(config, opt);
+        writeFileSync(configPath, JSON.stringify(config, null, 2));
+      },
+    });
+
+    console.log(chalk.green(`\n✓ Applied ${applicable.length} optimization(s)`));
+    if (skippedInfo > 0) {
+      console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+    }
+    console.log(chalk.dim(`Backup: ${result.backupId}`));
+    console.log(chalk.dim("Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
+    console.log(chalk.dim("Something wrong? Rollback with: agent-optimizer rollback"));
+    console.log(chalk.dim(`  (or a specific one: agent-optimizer rollback --to ${result.backupId})`));
+  } catch (err) {
+    const { text, exitCode } = formatApplyError(err);
+    console.log(text);
+    process.exitCode = exitCode;
+  }
 }
