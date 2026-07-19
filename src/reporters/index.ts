@@ -3,6 +3,7 @@ import { createRequire } from "module";
 import type { AuditReport, AuditResult } from "../types.js";
 import { loadMonitorState } from "../monitor/state.js";
 import { termWidth, wrap } from "../utils/format.js";
+import { stampFindingIds } from "../utils/finding-id.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json");
@@ -248,6 +249,31 @@ export function printScanResults(results: AuditResult[]): void {
     }
   }
   console.log();
+}
+
+// The machine (`scan --json`) shape: the id-stamped scan findings plus a
+// status tally. Mirrors `audit --json`'s schemaVersion:1 contract — every result
+// carries a stable `id` + `machineFixable`, and any `untrusted: true` flag set by
+// the scanner on third-party content is preserved (stampFindingIds spreads the
+// finding through unchanged). summary counts derive from the result statuses.
+export interface ScanReport {
+  schemaVersion: 1;
+  results: Array<AuditResult & { id: string; machineFixable: boolean }>;
+  summary: { pass: number; warn: number; fail: number; info: number };
+}
+
+export function buildScanReport(results: AuditResult[]): ScanReport {
+  const stamped = stampFindingIds(results);
+  return {
+    schemaVersion: 1,
+    results: stamped,
+    summary: {
+      pass: stamped.filter((r) => r.status === "pass").length,
+      warn: stamped.filter((r) => r.status === "warn").length,
+      fail: stamped.filter((r) => r.status === "fail").length,
+      info: stamped.filter((r) => r.status === "info").length,
+    },
+  };
 }
 
 export { printBanner };

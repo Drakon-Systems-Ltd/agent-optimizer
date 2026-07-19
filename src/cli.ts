@@ -4,7 +4,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
 import { stampFindingIds } from "./utils/finding-id.js";
-import { generateReport, printBanner, printScanResults } from "./reporters/index.js";
+import { generateReport, printBanner, printScanResults, buildScanReport } from "./reporters/index.js";
 import {
   enrollMonitor,
   runMonitor,
@@ -501,10 +501,22 @@ program
     "~/.openclaw/openclaw.json"
   )
   .option("--workspace <path>", "Path to workspace directory")
+  .option("--json", "Output results as JSON (banner to stderr; no license nag)")
   .action(async (opts) => {
+    const { runSecurityScan } = await import("./auditors/openclaw/security-scan.js");
+
+    if (opts.json) {
+      // Machine path: banner to stderr, PURE JSON on stdout (id-stamped results +
+      // status summary). No human table, no license nag — `scan --json | jq` must
+      // parse. `untrusted: true` on third-party findings is preserved faithfully.
+      printBanner(true);
+      const results = await runSecurityScan(opts);
+      console.log(JSON.stringify(buildScanReport(results), null, 2));
+      return;
+    }
+
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("security scan\n"));
-    const { runSecurityScan } = await import("./auditors/openclaw/security-scan.js");
     const results = await runSecurityScan(opts);
 
     printScanResults(results);
@@ -650,14 +662,31 @@ program
   )
   .option("--list", "List the backup generations that touch this config")
   .option("--to <id>", "Restore a specific backup generation by id")
+  .option("--json", "Output as JSON (banner to stderr; structured per mode)")
   .action(async (opts) => {
+    const { runRollback } = await import("./utils/rollback.js");
+
+    if (opts.json) {
+      // Machine path: banner to stderr, PURE JSON on stdout. runRollback builds a
+      // structured result per mode (list / restore / error) instead of printing.
+      printBanner(true);
+      const { exitCode, json } = runRollback({
+        config: opts.config,
+        list: opts.list,
+        to: opts.to,
+        json: true,
+      });
+      console.log(JSON.stringify(json, null, 2));
+      if (exitCode) process.exitCode = exitCode;
+      return;
+    }
+
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("rollback\n"));
 
-    const { runRollback } = await import("./utils/rollback.js");
-    const code = runRollback({ config: opts.config, list: opts.list, to: opts.to });
+    const { exitCode } = runRollback({ config: opts.config, list: opts.list, to: opts.to });
     console.log();
-    if (code) process.exitCode = code;
+    if (exitCode) process.exitCode = exitCode;
   });
 
 // --- Snapshot & drift ---

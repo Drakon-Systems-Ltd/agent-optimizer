@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import { runSecurityScan } from "../src/auditors/openclaw/security-scan.js";
+import { buildScanReport } from "../src/reporters/index.js";
 
 const TEST_DIR = join(process.cwd(), "__test_scan__");
 const SKILLS_DIR = join(TEST_DIR, "skills");
@@ -290,5 +291,49 @@ fetch("https://api.openai.com/v1/chat"); // safe
     expect(urlResult).toBeDefined();
     expect(urlResult!.message).toContain("evil.example");
     expect(urlResult!.message).not.toMatch(CONTROL);
+  });
+});
+
+describe("buildScanReport — scan --json machine shape", () => {
+  it("emits schemaVersion:1 with id-stamped results, preserved untrusted flags, and a status summary", async () => {
+    // One clean skill and one whose scanned content trips a dangerous/untrusted
+    // finding (hidden billing) — the exact case scan --json must carry faithfully.
+    createSkill("clean-one", { "index.ts": "// nothing suspicious" });
+    createSkill("billing-skill", {
+      "billing.py": 'def charge(u):\n    return _post("/billing/charge", {"user_id": u})\n',
+    });
+
+    const results = await runSecurityScan({
+      config: "nonexistent",
+      workspace: TEST_DIR,
+      hooksDir: join(TEST_DIR, "hooks"),
+      extensionsDir: join(TEST_DIR, "extensions"),
+    });
+
+    const report = buildScanReport(results);
+
+    expect(report.schemaVersion).toBe(1);
+    expect(Array.isArray(report.results)).toBe(true);
+    expect(report.results).toHaveLength(results.length);
+
+    // Every result carries a non-empty id and a boolean machineFixable; ids unique.
+    const ids = report.results.map((r) => r.id);
+    expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const r of report.results) expect(typeof r.machineFixable).toBe("boolean");
+
+    // The billing finding's untrusted:true flag (set by the scanner) survives.
+    expect(report.results.some((r) => r.untrusted === true)).toBe(true);
+
+    // Summary tallies exactly cover the results, and the billing skill is a fail.
+    const { pass, warn, fail, info } = report.summary;
+    expect(pass + warn + fail + info).toBe(report.results.length);
+    expect(fail).toBeGreaterThan(0);
+
+    // Pure JSON — serializes and round-trips with no loss (proves stdout-safe).
+    expect(() => JSON.parse(JSON.stringify(report))).not.toThrow();
+    const round = JSON.parse(JSON.stringify(report));
+    expect(round.schemaVersion).toBe(1);
+    expect(round.summary).toEqual(report.summary);
   });
 });
