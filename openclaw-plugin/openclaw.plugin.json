@@ -1,0 +1,28 @@
+{
+  "id": "agent-optimizer",
+  "name": "Agent Optimizer",
+  "description": "Audit, plan, apply, roll back, and security-scan your OpenClaw config through the agent-optimizer CLI. The mutating tools (apply, rollback) are approval-gated.",
+  "version": "0.13.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cliPath": {
+        "type": "string",
+        "description": "Path or command for the agent-optimizer CLI (default: `agent-optimizer` on PATH)."
+      }
+    }
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "optimizer_audit",
+      "optimizer_plan",
+      "optimizer_apply",
+      "optimizer_rollback",
+      "optimizer_scan"
+    ]
+  }
+}
