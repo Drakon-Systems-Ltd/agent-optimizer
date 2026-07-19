@@ -558,6 +558,14 @@ program
     "--system <kind>",
     "Target system: claude-code | openclaw (auto-detected if omitted)"
   )
+  .option(
+    // Accepted-and-ignored: --plan and --apply-plan are ALWAYS-JSON machine verbs,
+    // so a redundant --json (Task 11/12's documented invocation) is absorbed rather
+    // than rejected by commander (which would emit "unknown option" + exit 1, an
+    // error an agent can't distinguish from a real failure). Output is unchanged.
+    "--json",
+    "Accepted for the machine verbs (--plan / --apply-plan already emit JSON); ignored otherwise"
+  )
   .action(async (opts) => {
     if (opts.plan) {
       // Free, read-only: no license check. Stdout carries pure JSON (the

@@ -1,4 +1,4 @@
-import { writeFileSync, renameSync } from "fs";
+import { readFileSync, writeFileSync, renameSync } from "fs";
 import { loadConfig, expandPath } from "../utils/config.js";
 import {
   transactionalApply,
@@ -7,12 +7,12 @@ import {
   ApplyRolledBackError,
   RollbackFailedError,
 } from "../utils/transactional.js";
-import { formatApplyError } from "../utils/apply-errors.js";
 import { planErrorEnvelope } from "../utils/cli-json.js";
 import {
   loadPlan,
   configHashOf,
   defaultPlansDir,
+  type OptimizePlan,
   type PlanProposal,
 } from "./plan.js";
 import { applyProposals } from "./openclaw/index.js";
@@ -27,7 +27,8 @@ export interface ApplyPlanOptions {
   /** The plan id to apply (12-hex; loadPlan regex-guards it). */
   applyPlan: string;
   /** Raw --only value: a comma-separated list of PROPOSAL IDS (not tags). When
-   *  omitted, ALL non-info proposals in the plan are selected. */
+   *  omitted, ALL non-info proposals in the plan are selected. When PROVIDED but
+   *  naming no valid ids (empty/whitespace), it is a bad-selection — never a no-op. */
   only?: string;
   /** Whether a valid license is present — apply-plan mutates, so it is gated.
    *  Injected by the caller (the CLI checks hasValidLicense()); tests pass it. */
@@ -47,10 +48,11 @@ export interface ApplyPlanResult {
   exitCode: number;
 }
 
-/** Exit-code taxonomy — every class distinct so the (benign) rollback-succeeded
- *  case can never be confused with the (critical) rollback-failed one:
- *    0 success · 1 license-required/usage · 2 plan-not-found · 3 plan-stale
- *    4 bad-selection · 5 apply-rolled-back · 6 apply-locked
+/** Exit-code taxonomy. Codes 5–8 are one-per-class so the (benign) apply-rolled-
+ *  back case can never be confused with the (critical) rollback-failed one. The
+ *  lookup-failure codes intentionally share a family:
+ *    0 success · 1 license-required/usage · 2 plan-not-found / plan-corrupt
+ *    3 plan-stale · 4 bad-selection · 5 apply-rolled-back · 6 apply-locked
  *    7 apply-precondition · 8 rollback-failed
  */
 function fail(
@@ -62,26 +64,27 @@ function fail(
   return { json: planErrorEnvelope(slug, message, extra), exitCode };
 }
 
-/** Map a transactionalApply failure to its distinct slug + exit code. The JSON
- *  slug is the source of truth for agents; the exit code never collides a benign
- *  class with the critical rollback-failed one. Exported so the full mapping
- *  (including the exit-8 double-failure path, which is impractical to trigger
- *  through the single-file apply) can be unit-tested with constructed errors. */
+/**
+ * Map a transactionalApply failure to its distinct slug + exit code. Exported so
+ * the full mapping (including the exit-8 double-failure path, which is impractical
+ * to trigger through the single-file apply) can be unit-tested with constructed
+ * errors.
+ *
+ * The `message` is the typed error's RAW `.message` — every transactional error
+ * carries a clean, single-line message. We deliberately do NOT route through the
+ * human formatter (apply-errors.ts) here: that emits terminal art (ANSI colour,
+ * a leading newline, `•` bullets) and duplicates the structured `backupId` /
+ * `reasons` siblings — noise on a pure-JSON machine path.
+ */
 export function mapApplyError(e: unknown, planId: string): ApplyPlanResult {
   if (e instanceof ApplyRolledBackError) {
     // Config untouched (auto-rolled back) — safe.
-    return fail(
-      "apply-rolled-back",
-      formatApplyError(e).text,
-      { planId, backupId: e.backupId, reasons: e.reasons },
-      5
-    );
+    return fail("apply-rolled-back", e.message, { planId, backupId: e.backupId, reasons: e.reasons }, 5);
   }
   if (e instanceof ApplyLockedError) {
-    return fail("apply-locked", formatApplyError(e).text, { planId }, 6);
+    return fail("apply-locked", e.message, { planId }, 6);
   }
   if (e instanceof ApplyPreconditionError) {
-    // The precondition message is detailed and clean (no chalk) — surface it raw.
     return fail("apply-precondition", e.message, { planId }, 7);
   }
   if (e instanceof RollbackFailedError) {
@@ -89,7 +92,7 @@ export function mapApplyError(e: unknown, planId: string): ApplyPlanResult {
     // not) is the loud flag; exit 8 is never shared with any other class.
     return fail(
       "rollback-failed",
-      formatApplyError(e).text,
+      e.message,
       {
         planId,
         backupId: e.backupId,
@@ -114,7 +117,8 @@ export function mapApplyError(e: unknown, planId: string): ApplyPlanResult {
  * The invariants this enforces:
  *  - never apply against drifted state (the staleness guard fires before any write),
  *  - apply exactly the approved subset (info-only proposals are never applied),
- *  - a bad apply auto-rolls-back, and a failed rollback is unmistakable (exit 8).
+ *  - a bad apply auto-rolls-back, and a failed rollback is unmistakable (exit 8),
+ *  - every failure (and success) emits a pure-JSON envelope with a stable slug.
  */
 export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
   const planId = opts.applyPlan;
@@ -131,8 +135,20 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
     );
   }
 
-  // 1. Load the plan (regex-guarded id; null on unknown id / bad format).
-  const plan = loadPlan(planId, opts.plansDir ?? defaultPlansDir());
+  // 1. Load the plan. loadPlan returns null for an unknown id / bad format, but
+  //    THROWS for a present-but-corrupt plan file (valid id, unparseable JSON) —
+  //    guard it so that becomes a JSON slug, not a raw stack trace + empty stdout.
+  let plan: OptimizePlan | null;
+  try {
+    plan = loadPlan(planId, opts.plansDir ?? defaultPlansDir());
+  } catch (e) {
+    return fail(
+      "plan-corrupt",
+      `Plan ${planId} exists but could not be read — re-plan (${(e as Error).message})`,
+      { planId },
+      2
+    );
+  }
   if (!plan) {
     return fail(
       "plan-not-found",
@@ -177,6 +193,16 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    // PROVIDED but naming nothing (empty / all-whitespace) is a caller error, not
+    // a silent no-op: an agent that built a bad selection string must hear about it.
+    if (requested.length === 0) {
+      return fail(
+        "bad-selection",
+        "--only was given but named no valid proposal ids",
+        { planId, requested, invalid: [], infoOnly: [], validIds },
+        4
+      );
+    }
     const byId = new Map(plan.proposals.map((p) => [p.id, p]));
     const invalid: string[] = []; // ids not present in the plan at all
     const infoOnly: string[] = []; // ids that resolve to info-only proposals
@@ -201,6 +227,7 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
     }
     selected = picked;
   } else {
+    // OMITTED --only = apply ALL non-info proposals.
     selected = applicable;
   }
 
@@ -218,9 +245,19 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
   }
 
   // 4. Apply transactionally: snapshot → mutate → verify → auto-rollback on
-  //    failure. The staleness guard above already parsed the config, so a null
-  //    here would be a genuine race — guard it as stale rather than crashing.
-  const config = loadConfig(opts.config);
+  //    failure. The staleness guard above already parsed the config, so a null /
+  //    throw here would be a genuine race — guard both as stale rather than crashing.
+  let config;
+  try {
+    config = loadConfig(opts.config);
+  } catch (e) {
+    return fail(
+      "plan-stale",
+      `Config could not be loaded for apply — re-plan (${(e as Error).message})`,
+      { planId, expected: plan.configHash, actual: "<unreadable>" },
+      3
+    );
+  }
   if (!config) {
     return fail(
       "plan-stale",
@@ -230,6 +267,17 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
     );
   }
   const target = expandPath(opts.config);
+
+  // Signal a JSON5 source rewrite: our mutate re-serializes the config as plain
+  // JSON, stripping any comments / trailing commas. Detect it the way the optimizer
+  // apply does — strict JSON.parse of the original throws for JSON5 — so the
+  // approving agent sees `reformatted: true`. Safe (the backup preserves originals).
+  let reformatted = false;
+  try {
+    JSON.parse(readFileSync(target, "utf-8"));
+  } catch {
+    reformatted = true;
+  }
 
   try {
     const result = transactionalApply({
@@ -249,9 +297,11 @@ export function runApplyPlan(opts: ApplyPlanOptions): ApplyPlanResult {
     return {
       json: {
         applied: selected.map((p) => p.id),
+        planId,
         backupId: result.backupId,
         verified: true,
         requiresRestart: selected.some((p) => p.requiresRestart),
+        reformatted,
         rollbackHint: `agent-optimizer rollback --to ${result.backupId}`,
       },
       exitCode: 0,

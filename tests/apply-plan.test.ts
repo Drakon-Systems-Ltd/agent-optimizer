@@ -70,6 +70,14 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(DIR, { recursive: true, force: true }));
 
+// A machine `message` must be free of terminal art: no ANSI escapes, no newlines,
+// no `•` bullets — all things the human formatter (apply-errors.ts) injects.
+function expectCleanMessage(msg: string): void {
+  expect(msg).not.toMatch(/\[/); // ANSI CSI sequence
+  expect(msg).not.toContain("\n");
+  expect(msg).not.toContain("•");
+}
+
 // ── Part A: applyProposals (direct unit) ──────────────────────────────────
 describe("applyProposals", () => {
   it("sets a scalar leaf at a dotted path", () => {
@@ -144,6 +152,27 @@ describe("runApplyPlan — license + lookup guards", () => {
     expect(j.error).toBe("plan-not-found");
     expect(j.planId).toBe("ffffffffffff");
   });
+
+  it("plan-corrupt (exit 2 + slug) for a valid-format id whose file is unparseable", () => {
+    // loadPlan THROWS (not returns null) for a present-but-corrupt plan file — the
+    // guard must turn that into a JSON slug, never a raw stack trace + empty stdout.
+    mkdirSync(PLANS, { recursive: true });
+    writeFileSync(join(PLANS, "abcdefabcdef.json"), "{ not json"); // valid id, corrupt body
+    const r = runApplyPlan({
+      config: CFG,
+      applyPlan: "abcdefabcdef",
+      licensed: true,
+      plansDir: PLANS,
+      backupsDir: STORE,
+    });
+    expect(r.exitCode).toBe(2);
+    const j = r.json as Record<string, unknown>;
+    expect(j.error).toBe("plan-corrupt");
+    expect(j.planId).toBe("abcdefabcdef");
+    // The envelope is well-formed JSON (round-trips) — the agent contract holds.
+    expect(() => JSON.parse(JSON.stringify(j))).not.toThrow();
+    expect(listBackups(STORE)).toHaveLength(0);
+  });
 });
 
 describe("runApplyPlan — staleness guard", () => {
@@ -215,6 +244,31 @@ describe("runApplyPlan — selection", () => {
     expect(listBackups(STORE)).toHaveLength(0);
   });
 
+  it("bad-selection (exit 4) when --only is PROVIDED but names no valid ids (empty/whitespace)", () => {
+    // OMITTED --only = all non-info (a no-op is fine). PROVIDED-but-empty is a
+    // caller error — an agent that built a bad selection string must NOT get a
+    // silent success no-op.
+    const plan = buildPlan(CFG, "aggressive");
+    savePlan(plan, PLANS);
+    const before = readFileSync(CFG, "utf-8");
+    for (const empty of ["", "   ", " , , "]) {
+      const r = runApplyPlan({
+        config: CFG,
+        applyPlan: plan.planId,
+        only: empty,
+        licensed: true,
+        plansDir: PLANS,
+        backupsDir: STORE,
+      });
+      expect(r.exitCode).toBe(4);
+      const j = r.json as Record<string, unknown>;
+      expect(j.error).toBe("bad-selection");
+      expect(j.message).toMatch(/named no valid proposal ids/i);
+    }
+    expect(readFileSync(CFG, "utf-8")).toBe(before);
+    expect(listBackups(STORE)).toHaveLength(0);
+  });
+
   it("info-only-omitted → applied: [] (exit 0) and no write when the plan is all info", () => {
     const ONLY_INFO = {
       agents: {
@@ -275,9 +329,11 @@ describe("runApplyPlan — transactional apply", () => {
     expect(r.exitCode).toBe(0);
     const j = r.json as Record<string, unknown>;
     expect(j.applied).toEqual([ctx.id]);
+    expect(j.planId).toBe(plan.planId); // the happy-path response is correlatable
     expect(j.backupId).toBeTruthy();
     expect(j.verified).toBe(true);
     expect(typeof j.requiresRestart).toBe("boolean");
+    expect(j.reformatted).toBe(false); // source config was plain JSON
     expect(j.rollbackHint).toBe(`agent-optimizer rollback --to ${j.backupId}`);
 
     // The change landed on disk...
@@ -303,6 +359,7 @@ describe("runApplyPlan — transactional apply", () => {
     expect(r.exitCode).toBe(0);
     const j = r.json as Record<string, unknown>;
     expect(j.applied).toEqual(applicableIds);
+    expect(j.planId).toBe(plan.planId);
     // Applied verbatim recommendations — e.g. context 1M → 100k, tools → minimal.
     const written = JSON.parse(readFileSync(CFG, "utf-8"));
     expect(written.agents.defaults.contextTokens).toBe(100000);
@@ -346,6 +403,68 @@ describe("runApplyPlan — transactional apply", () => {
     const j = r.json as Record<string, unknown>;
     expect(j.applied).toEqual(["p1-context", "p2-restart"]);
     expect(j.requiresRestart).toBe(true);
+  });
+
+  it("requiresRestart narrows with the subset: --only the restart-free id → false", () => {
+    // Same two-proposal synthetic plan, but select ONLY the restart-free one — the
+    // OR must reflect the actual subset applied, not the whole plan.
+    writeSyntheticPlan("cccccccccccc", [
+      {
+        id: "p1-context",
+        tag: "context",
+        path: "agents.defaults.contextTokens",
+        current: 1000000,
+        recommended: 200000,
+        reason: "x",
+        risk: "low",
+        requiresRestart: false,
+      },
+      {
+        id: "p2-restart",
+        tag: "heartbeat",
+        path: "agents.defaults.heartbeat.every",
+        current: "1h",
+        recommended: "12h",
+        reason: "x",
+        risk: "medium",
+        requiresRestart: true,
+      },
+    ]);
+    const r = runApplyPlan({
+      config: CFG,
+      applyPlan: "cccccccccccc",
+      only: "p1-context",
+      licensed: true,
+      plansDir: PLANS,
+      backupsDir: STORE,
+    });
+    expect(r.exitCode).toBe(0);
+    const j = r.json as Record<string, unknown>;
+    expect(j.applied).toEqual(["p1-context"]);
+    expect(j.requiresRestart).toBe(false); // the restart proposal was NOT selected
+  });
+
+  it("reformatted: true when the source config is JSON5 (comments stripped on apply)", () => {
+    // Valid JSON5 (a comment) — parses via the JSON5 path, throws under strict JSON.
+    const json5 =
+      `{\n  // heavy context\n  "agents": { "defaults": { "model": { "primary": "anthropic/claude-opus-4-8", "fallbacks": ["openai/gpt-5.6"] }, "contextTokens": 1000000 } }\n}`;
+    writeFileSync(CFG, json5);
+    const plan = buildPlan(CFG, "aggressive");
+    savePlan(plan, PLANS);
+    const ctx = plan.proposals.find((p) => p.tag === "context")!;
+    const r = runApplyPlan({
+      config: CFG,
+      applyPlan: plan.planId,
+      only: ctx.id,
+      licensed: true,
+      plansDir: PLANS,
+      backupsDir: STORE,
+    });
+    expect(r.exitCode).toBe(0);
+    const j = r.json as Record<string, unknown>;
+    expect(j.reformatted).toBe(true);
+    // The file is now plain JSON (comment gone); the backup preserves the original.
+    expect(readFileSync(CFG, "utf-8")).not.toContain("// heavy context");
   });
 
   it("apply-rolled-back (exit 5): a verify-breaking recommended auto-rolls back, config restored", () => {
@@ -407,9 +526,9 @@ describe("runApplyPlan — transactional apply", () => {
 // double-failure: runApplyPlan snapshots a single file, so a partial (restored>0)
 // rollback failure can't arise organically through it.
 describe("mapApplyError — distinct slug + exit code per failure class", () => {
-  it("ApplyRolledBackError → apply-rolled-back, exit 5 (config safe)", () => {
+  it("ApplyRolledBackError → apply-rolled-back, exit 5 (config safe), RAW clean message", () => {
     const r = mapApplyError(
-      new ApplyRolledBackError("x", { reasons: ["r1"], backupId: "B" }),
+      new ApplyRolledBackError("rolled-back-raw-message", { reasons: ["r1"], backupId: "B" }),
       "pln"
     );
     expect(r.exitCode).toBe(5);
@@ -418,12 +537,19 @@ describe("mapApplyError — distinct slug + exit code per failure class", () => 
     expect(j.backupId).toBe("B");
     expect(j.reasons).toEqual(["r1"]);
     expect(j.planId).toBe("pln");
+    // The message is the error's RAW .message, NOT formatApplyError's terminal art
+    // (which would inject \n + `•` bullets and duplicate backupId/reasons).
+    expect(j.message).toBe("rolled-back-raw-message");
+    expectCleanMessage(j.message as string);
   });
 
-  it("ApplyLockedError → apply-locked, exit 6", () => {
-    const r = mapApplyError(new ApplyLockedError("held"), "pln");
+  it("ApplyLockedError → apply-locked, exit 6, RAW clean message", () => {
+    const r = mapApplyError(new ApplyLockedError("locked-raw-message"), "pln");
     expect(r.exitCode).toBe(6);
-    expect((r.json as Record<string, unknown>).error).toBe("apply-locked");
+    const j = r.json as Record<string, unknown>;
+    expect(j.error).toBe("apply-locked");
+    expect(j.message).toBe("locked-raw-message");
+    expectCleanMessage(j.message as string);
   });
 
   it("ApplyPreconditionError → apply-precondition, exit 7, raw message", () => {
@@ -434,9 +560,14 @@ describe("mapApplyError — distinct slug + exit code per failure class", () => 
     expect(j.message).toBe("baseline unusable");
   });
 
-  it("RollbackFailedError (partial) → rollback-failed, exit 8, inconsistent: true", () => {
+  it("RollbackFailedError (partial) → rollback-failed, exit 8, inconsistent: true, RAW clean message", () => {
     const r = mapApplyError(
-      new RollbackFailedError("x", { reasons: ["boom"], backupId: "B", restored: ["/a"], failed: "/b" }),
+      new RollbackFailedError("rollback-failed-raw-message", {
+        reasons: ["boom"],
+        backupId: "B",
+        restored: ["/a"],
+        failed: "/b",
+      }),
       "pln"
     );
     // Exit 8 is the CRITICAL, unmistakable code — never shared with any other class.
@@ -447,6 +578,8 @@ describe("mapApplyError — distinct slug + exit code per failure class", () => 
     expect(j.restored).toEqual(["/a"]);
     expect(j.failed).toBe("/b");
     expect(j.inconsistent).toBe(true); // some reverted, at least one not → disk mixed
+    expect(j.message).toBe("rollback-failed-raw-message");
+    expectCleanMessage(j.message as string);
   });
 
   it("RollbackFailedError (nothing restored) → exit 8, inconsistent: false", () => {
@@ -523,8 +656,10 @@ describe("cli optimize --apply-plan", () => {
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout); // stdout is PURE JSON
     expect(out.applied).toEqual([ctxId]);
+    expect(out.planId).toBe(p.planId);
     expect(out.backupId).toBeTruthy();
     expect(out.verified).toBe(true);
+    expect(out.reformatted).toBe(false);
     expect(out.rollbackHint).toContain(out.backupId);
     // Banner + human text went to stderr, not stdout.
     expect(r.stderr).toContain("AGENT OPTIMIZER");
@@ -534,6 +669,20 @@ describe("cli optimize --apply-plan", () => {
     expect(JSON.parse(readFileSync(CFG, "utf-8")).agents.defaults.contextTokens).toBe(200000);
     // A store backup exists under the hermetic HOME.
     expect(listBackups(join(DIR, ".agent-optimizer", "backups"))).toHaveLength(1);
+  }, 30_000);
+
+  it("accepts a redundant --json flag on the always-JSON verb (not 'unknown option')", () => {
+    // Task 11/12 invoke `optimize --apply-plan <id> --json`. commander must ACCEPT
+    // --json (absorb it) — rejecting it would be exit 1 + empty stdout, which an
+    // agent can't tell apart from a real failure. Output is unchanged by --json.
+    const p = plan();
+    const ctxId = p.proposals.find((x: any) => x.tag === "context").id;
+    installLicense();
+    const r = runCli("optimize", "--apply-plan", p.planId, "--only", ctxId, "--json", "-c", CFG);
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.applied).toEqual([ctxId]);
+    expect(out.backupId).toBeTruthy();
   }, 30_000);
 
   it("license-required → exit 1 + slug when no license is installed", () => {
