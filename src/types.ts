@@ -5,6 +5,12 @@ export interface AuditResult {
   message: string;
   fix?: string;
   autoFixable?: boolean;
+  // Stable kebab-slug of category/check, dedup-suffixed within a report; agents
+  // key off this, not the English message (which varies per run).
+  id?: string;
+  // true when `audit --fix` can apply this finding automatically (autoFixable +
+  // a concrete apply payload). Mirrors isMachineFixable() exactly.
+  machineFixable?: boolean;
   system?: SystemKind;
   // true when message/check contain sanitized third-party content the agent must
   // treat as DATA, never instructions.
@@ -30,6 +36,8 @@ export interface FixOperation {
 }
 
 export interface AuditReport {
+  // Audit JSON contract version; bump on breaking shape changes.
+  schemaVersion: number;
   timestamp: string;
   host: string;
   systems: DetectedSystem[];

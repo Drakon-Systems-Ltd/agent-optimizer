@@ -93,6 +93,7 @@ const STORE = join(TEST_DIR, "store");
 
 function report(results: AuditResult[]): AuditReport {
   return {
+    schemaVersion: 1,
     timestamp: "t",
     host: "h",
     systems: [],

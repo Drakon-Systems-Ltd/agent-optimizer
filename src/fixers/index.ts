@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { resolve } from "path";
 import { expandPath } from "../utils/config.js";
 import { transactionalApply } from "../utils/transactional.js";
+import { isMachineFixable } from "../utils/finding-id.js";
 import type { AuditReport, AuditResult, FixOperation } from "../types.js";
 
 export interface FileFixResult {
@@ -106,12 +107,16 @@ function opOrder(op: FixOperation): number {
   return op.op === "arrayRemove" ? 0 : 1;
 }
 
+// The exact set `audit --fix` acts on. Shares isMachineFixable() with the
+// `machineFixable` flag stamped onto the report so the two can never drift.
 export function findingsWithFixes(report: AuditReport): AuditResult[] {
-  return report.results.filter((r) => r.autoFixable && r.apply && r.apply.length > 0);
+  return report.results.filter(isMachineFixable);
 }
 
+// autoFixable findings the engine can't act on (flagged fixable but no concrete
+// apply payload) — reported as "skipped" so the user knows to fix them by hand.
 export function autoFixableWithoutPayload(report: AuditReport): number {
-  return report.results.filter((r) => r.autoFixable && (!r.apply || r.apply.length === 0)).length;
+  return report.results.filter((r) => r.autoFixable === true && !isMachineFixable(r)).length;
 }
 
 export interface ApplyFixesOpts {

@@ -705,6 +705,7 @@ program
     const results = detectDrift(opts.config, opts.name);
     generateReport(
       {
+        schemaVersion: 1,
         timestamp: new Date().toISOString(),
         host: "localhost",
         systems: [],
