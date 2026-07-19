@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { applyOp, applyFixes, findingsWithFixes } from "../src/fixers/index.js";
+import { listBackups } from "../src/utils/backups.js";
+import { ApplyRolledBackError } from "../src/utils/transactional.js";
 import type { AuditReport, AuditResult, FixOperation } from "../src/types.js";
 
 describe("applyOp", () => {
@@ -85,9 +87,13 @@ const TEST_DIR = join(process.cwd(), "__test_fixers__");
 const CONFIG = join(TEST_DIR, "openclaw.json");
 const AGENT_DIR = join(TEST_DIR, "agent");
 const MODELS = join(AGENT_DIR, "models.json");
+// Hermetic backup store — lives under TEST_DIR so it (and the derived apply.lock)
+// is torn down with everything else; nothing ever touches the real ~/.agent-optimizer.
+const STORE = join(TEST_DIR, "store");
 
 function report(results: AuditResult[]): AuditReport {
   return {
+    schemaVersion: 1,
     timestamp: "t",
     host: "h",
     systems: [],
@@ -121,7 +127,7 @@ describe("applyFixes", () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true });
   });
 
-  it("applies config + models fixes, writes backups, and counts changes", () => {
+  it("applies config + models fixes via the store, returns a backupId, and counts changes", () => {
     const r = report([
       fix([{ target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: ["p"] }]),
       fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }]),
@@ -129,12 +135,18 @@ describe("applyFixes", () => {
       fix([{ target: "models", op: "delete", path: "providers.openai-codex.api" }]),
     ]);
 
-    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
 
     expect(result.applied).toBe(4);
     expect(result.files).toHaveLength(2); // config + models both touched
-    expect(existsSync(`${CONFIG}.pre-fix.bak`)).toBe(true);
-    expect(existsSync(`${MODELS}.pre-fix.bak`)).toBe(true);
+    expect(result.backupId).toBeTruthy();
+    // The store holds ONE generation snapshotting both touched files; no sidecars.
+    const gens = listBackups(STORE);
+    expect(gens).toHaveLength(1);
+    expect(gens[0].id).toBe(result.backupId);
+    expect(gens[0].files.sort()).toEqual(["models.json", "openclaw.json"]);
+    expect(existsSync(`${CONFIG}.pre-fix.bak`)).toBe(false);
+    expect(existsSync(`${MODELS}.pre-fix.bak`)).toBe(false);
 
     const cfg = JSON.parse(readFileSync(CONFIG, "utf-8"));
     expect(cfg.agents.defaults.model.fallbacks).toEqual(["a"]);
@@ -154,61 +166,76 @@ describe("applyFixes", () => {
       fix([{ target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: ["legacy/alias"] }]),
       fix([{ target: "config", op: "set", path: "agents.defaults.model.primary", value: "canon/x" }]),
     ]);
-    applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
     const cfg = JSON.parse(readFileSync(CONFIG, "utf-8"));
     // arrayRemove ran first → the aliased dup is gone, arrayReplace then no-ops.
     expect(cfg.agents.defaults.model.fallbacks).toEqual(["other"]);
     expect(cfg.agents.defaults.model.primary).toBe("canon/x");
   });
 
-  it("dry-run writes nothing but still counts", () => {
+  it("dry-run writes nothing, takes no backup, but still counts", () => {
     const r = report([
       fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }]),
     ]);
-    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, dryRun: true });
+    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, dryRun: true, backupsDir: STORE });
     expect(result.applied).toBe(1);
     expect(result.dryRun).toBe(true);
-    expect(existsSync(`${CONFIG}.pre-fix.bak`)).toBe(false);
+    expect(result.backupId).toBeUndefined();
+    expect(listBackups(STORE)).toHaveLength(0);
     const cfg = JSON.parse(readFileSync(CONFIG, "utf-8"));
     expect(cfg.agents.defaults.thinkingDefault).toBe("bogus"); // unchanged on disk
   });
 
-  it("applies 0 when the config is already clean (no backup written)", () => {
+  it("applies 0 when the config is already clean (no write, no backup)", () => {
     writeFileSync(CONFIG, JSON.stringify({ agents: { defaults: { model: { primary: "p", fallbacks: ["a"] } } } }));
     const r = report([
       fix([{ target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: ["p"] }]),
     ]);
-    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
     expect(result.applied).toBe(0);
     expect(result.files).toHaveLength(0);
-    expect(existsSync(`${CONFIG}.pre-fix.bak`)).toBe(false);
+    expect(result.backupId).toBeUndefined();
+    expect(listBackups(STORE)).toHaveLength(0);
   });
 
-  it("skips models ops when models.json is absent (no crash)", () => {
+  it("skips models ops when models.json is absent (no crash, no backup)", () => {
     rmSync(MODELS);
     const r = report([
       fix([{ target: "models", op: "delete", path: "providers.openai-codex.api" }]),
     ]);
-    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
     expect(result.applied).toBe(0);
-    expect(() => applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR })).not.toThrow();
+    expect(result.backupId).toBeUndefined();
+    expect(listBackups(STORE)).toHaveLength(0);
+    expect(() => applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE })).not.toThrow();
   });
 
-  it("never clobbers an existing .pre-fix.bak (preserves the pristine original)", () => {
+  it("auto-rolls back (and throws) when a fix would break the config", () => {
+    // Start from a clean, valid config so the baseline is fail-free.
+    const valid = {
+      agents: {
+        defaults: {
+          model: { primary: "anthropic/claude-opus-4-8", fallbacks: ["openai/gpt-5.6"] },
+          contextTokens: 1000000,
+        },
+      },
+    };
+    writeFileSync(CONFIG, JSON.stringify(valid));
     const original = readFileSync(CONFIG, "utf-8");
-    const r1 = report([fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }])]);
-    applyFixes(r1, { configPath: CONFIG, agentDir: AGENT_DIR });
-    expect(readFileSync(`${CONFIG}.pre-fix.bak`, "utf-8")).toBe(original);
-
-    // A second writing run (different fix) must NOT overwrite the original backup.
-    const r2 = report([fix([{ target: "config", op: "arrayRemove", path: "agents.defaults.model.fallbacks", remove: ["p"] }])]);
-    applyFixes(r2, { configPath: CONFIG, agentDir: AGENT_DIR });
-    expect(readFileSync(`${CONFIG}.pre-fix.bak`, "utf-8")).toBe(original);
+    // This "fix" INTRODUCES an invalid thinkingDefault → verify regresses → rollback.
+    const r = report([
+      fix([{ target: "config", op: "set", path: "agents.defaults.thinkingDefault", value: "nope" }]),
+    ]);
+    expect(() =>
+      applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE })
+    ).toThrow(ApplyRolledBackError);
+    // The config was reverted to its exact pre-apply bytes.
+    expect(readFileSync(CONFIG, "utf-8")).toBe(original);
   });
 
   it("leaves a temp file behavior clean (atomic write replaces, no .tmp left)", () => {
     const r = report([fix([{ target: "config", op: "delete", path: "agents.defaults.thinkingDefault" }])]);
-    applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
     const leftover = readdirSync(TEST_DIR).filter((f) => f.includes(".tmp-"));
     expect(leftover).toHaveLength(0);
   });
@@ -219,7 +246,7 @@ describe("applyFixes", () => {
       { category: "Y", check: "y", status: "info", message: "m" },
     ]);
     expect(findingsWithFixes(r)).toHaveLength(0);
-    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR });
+    const result = applyFixes(r, { configPath: CONFIG, agentDir: AGENT_DIR, backupsDir: STORE });
     expect(result.applied).toBe(0);
     expect(result.skipped).toBe(1); // the autoFixable-without-payload one
   });

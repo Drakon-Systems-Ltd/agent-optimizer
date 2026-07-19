@@ -28,6 +28,11 @@ import { auditToolsByProvider } from "./tools-by-provider.js";
 import { auditCompactionEngine } from "./compaction-engine.js";
 import { auditVisionModels } from "./vision-models.js";
 
+// Re-exported so existing consumers can keep importing the name from here; the
+// definition lives in the leaf module ./pure-auditors.ts (no ora/chalk drag) so
+// apply-verify can import it without pulling in this CLI-layer module.
+export { PURE_CONFIG_AUDITORS } from "./pure-auditors.js";
+
 interface AuditorModule {
   name: string;
   run: () => AuditResult[];

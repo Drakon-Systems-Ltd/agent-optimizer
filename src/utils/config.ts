@@ -36,11 +36,19 @@ const INCLUDE_KEY = "$include";
 const MAX_INCLUDE_DEPTH = 10;
 
 let configLoadIssues: string[] = [];
+let configIncludePaths: string[] = [];
 
 /** Non-fatal problems from the last loadConfig() call ($include files missing,
  * cycles, depth) — the audit should surface these, not crash on them. */
 export function getConfigLoadIssues(): string[] {
   return configLoadIssues;
+}
+
+/** Resolved absolute paths of every $include file read during the last
+ * loadConfig() call (missing files excluded — they contributed no bytes).
+ * Lets callers hash the full set of files the resolved config came from. */
+export function getConfigIncludePaths(): string[] {
+  return configIncludePaths;
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -72,6 +80,9 @@ function loadIncludeFile(includePath: string, baseDir: string, stack: string[]):
     configLoadIssues.push(`$include file not found: ${includePath} (resolved to ${resolved}) — OpenClaw will fail to load this config`);
     return {};
   }
+  // Track even unparseable files: their bytes were read, and editing them
+  // changes what the config would resolve to.
+  if (!configIncludePaths.includes(resolved)) configIncludePaths.push(resolved);
   try {
     const parsed = parseJsonCompat<unknown>(readFileSync(resolved, "utf-8"));
     return resolveIncludes(parsed, dirname(resolved), [...stack, resolved]);
@@ -114,9 +125,20 @@ function resolveIncludes(value: unknown, baseDir: string, stack: string[]): unkn
 
 export function loadConfig(configPath: string): OpenClawConfig | null {
   configLoadIssues = [];
+  configIncludePaths = [];
   const resolved = expandPath(configPath);
   if (!existsSync(resolved)) return null;
-  const parsed = parseJsonCompat<unknown>(readFileSync(resolved, "utf-8"));
+  return loadConfigFromString(readFileSync(resolved, "utf-8"), configPath);
+}
+
+/** Like loadConfig, but parses caller-supplied raw bytes for the top-level
+ * file — lets callers read the file once and both parse and hash the SAME
+ * bytes (no read-twice race). $include files are still read from disk. */
+export function loadConfigFromString(raw: string, configPath: string): OpenClawConfig | null {
+  configLoadIssues = [];
+  configIncludePaths = [];
+  const resolved = expandPath(configPath);
+  const parsed = parseJsonCompat<unknown>(raw);
   const withIncludes = resolveIncludes(parsed, dirname(resolved), [resolved]);
   return isPlainObject(withIncludes) ? (withIncludes as OpenClawConfig) : null;
 }

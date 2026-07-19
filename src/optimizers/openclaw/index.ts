@@ -2,8 +2,13 @@ import chalk from "chalk";
 import type { OptimizeOptions, OpenClawConfig } from "../../types.js";
 import { loadConfig, expandPath } from "../../utils/config.js";
 import { termWidth, wrap } from "../../utils/format.js";
-import { writeFileSync, copyFileSync } from "fs";
+import { readFileSync, writeFileSync, renameSync } from "fs";
+import { transactionalApply } from "../../utils/transactional.js";
+import { formatApplyError, formatApplySuccess } from "../../utils/apply-errors.js";
 import type { Optimization } from "../index.js";
+// Type-only — erased at compile time, so no runtime import cycle with plan.ts
+// (which imports getOptimizations/PROFILE_NAMES from this module).
+import type { PlanProposal } from "../plan.js";
 
 export const OPTIMIZATION_TAGS = [
   "context",
@@ -29,6 +34,47 @@ export const OPTIMIZATION_TAGS = [
 ] as const;
 
 export type OptimizationTag = (typeof OPTIMIZATION_TAGS)[number];
+
+export type RiskLevel = "low" | "medium" | "high";
+
+export interface OpenClawOptimization extends Optimization {
+  tag: OptimizationTag;
+  risk: RiskLevel;
+  requiresRestart: boolean;
+}
+
+type TagMeta = Pick<OpenClawOptimization, "risk" | "requiresRestart">;
+
+// Risk: low = token/limit tuning, instantly reversible; medium = user-visible
+// behavior change; high = applying an actual model change. Today's model tags
+// (fallback-chain, channel-model-routing) are info-only suggestions that never
+// get applied, hence medium — nothing emits high yet.
+// requiresRestart: true only for keys OpenClaw cannot hot-reload. 2026.7.1's
+// reload modes (gateway.reload.mode hot|hybrid) hot-apply agents.defaults.*,
+// channels.*, and tools.* (covers tools-profile); keep this map conservative
+// and verify against the OpenClaw source worktree if a new tag is added.
+const TAG_META: Record<OptimizationTag, TagMeta> = {
+  context: { risk: "low", requiresRestart: false },
+  heartbeat: { risk: "medium", requiresRestart: false },
+  subagents: { risk: "low", requiresRestart: false },
+  compaction: { risk: "low", requiresRestart: false },
+  pruning: { risk: "low", requiresRestart: false },
+  "image-max-dim": { risk: "low", requiresRestart: false },
+  "bootstrap-max-chars": { risk: "low", requiresRestart: false },
+  "bootstrap-total-max-chars": { risk: "low", requiresRestart: false },
+  "isolated-cron": { risk: "medium", requiresRestart: false },
+  "cache-ttl-pruning": { risk: "low", requiresRestart: false },
+  "fallback-chain": { risk: "medium", requiresRestart: false },
+  "channel-history-limit": { risk: "medium", requiresRestart: false },
+  "channel-media-max": { risk: "medium", requiresRestart: false },
+  "channel-text-chunk": { risk: "medium", requiresRestart: false },
+  "discord-idle-hours": { risk: "medium", requiresRestart: false },
+  "channel-model-routing": { risk: "medium", requiresRestart: false },
+  "tools-profile": { risk: "medium", requiresRestart: false },
+  "runRetries-cap": { risk: "low", requiresRestart: false },
+  "discord-suppress-embeds": { risk: "medium", requiresRestart: false },
+  "slack-unfurl-links": { risk: "medium", requiresRestart: false },
+};
 
 interface ProfileTargets {
   contextTokens: number;
@@ -94,6 +140,9 @@ const PROFILES: Record<string, ProfileTargets> = {
   },
 };
 
+/** Known optimize profiles, derived from PROFILES so the list can't drift. */
+export const PROFILE_NAMES: readonly string[] = Object.keys(PROFILES);
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -105,8 +154,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function getOptimizations(
   config: OpenClawConfig,
   profile: string
-): Optimization[] {
-  const opts: Optimization[] = [];
+): OpenClawOptimization[] {
+  const opts: OpenClawOptimization[] = [];
+  // All entries route through here so no push site can omit risk/requiresRestart.
+  const push = (o: Omit<OpenClawOptimization, keyof TagMeta>) =>
+    opts.push({ ...o, ...TAG_META[o.tag] });
   const target = PROFILES[profile] ?? PROFILES.balanced;
   const defaults = config.agents?.defaults;
 
@@ -115,7 +167,7 @@ export function getOptimizations(
     // Context tokens
     const currentContext = defaults.contextTokens ?? 200000;
     if (currentContext > target.contextTokens) {
-      opts.push({
+      push({
         tag: "context",
         path: "agents.defaults.contextTokens",
         current: currentContext,
@@ -127,7 +179,7 @@ export function getOptimizations(
     // Heartbeat
     const currentHeartbeat = defaults.heartbeat?.every ?? "1h";
     if (currentHeartbeat !== target.heartbeat) {
-      opts.push({
+      push({
         tag: "heartbeat",
         path: "agents.defaults.heartbeat.every",
         current: currentHeartbeat,
@@ -139,7 +191,7 @@ export function getOptimizations(
     // Subagents
     const currentSub = defaults.subagents?.maxConcurrent ?? 4;
     if (currentSub > target.subagents) {
-      opts.push({
+      push({
         tag: "subagents",
         path: "agents.defaults.subagents.maxConcurrent",
         current: currentSub,
@@ -150,7 +202,7 @@ export function getOptimizations(
 
     // Compaction
     if (!defaults.compaction?.mode) {
-      opts.push({
+      push({
         tag: "compaction",
         path: "agents.defaults.compaction.mode",
         current: "none",
@@ -161,7 +213,7 @@ export function getOptimizations(
 
     // Context pruning (legacy — when totally unset)
     if (!defaults.contextPruning?.mode) {
-      opts.push({
+      push({
         tag: "pruning",
         path: "agents.defaults.contextPruning",
         current: "none",
@@ -181,7 +233,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.imageMaxDim;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "image-max-dim",
         path: "agents.defaults.imageMaxDimensionPx",
         current: cur ?? "unset",
@@ -200,7 +252,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.bootstrapMax;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "bootstrap-max-chars",
         path: "agents.defaults.bootstrapMaxChars",
         current: cur ?? "unset",
@@ -219,7 +271,7 @@ export function getOptimizations(
     const exceeds = isNum && (cur as number) > target.bootstrapTotal;
     const missingButBudgeted = !isNum && profile !== "minimal";
     if (exceeds || missingButBudgeted) {
-      opts.push({
+      push({
         tag: "bootstrap-total-max-chars",
         path: "agents.defaults.bootstrapTotalMaxChars",
         current: cur ?? "unset",
@@ -236,7 +288,7 @@ export function getOptimizations(
     const heartbeat = defaultsRaw.heartbeat as Record<string, unknown> | undefined;
     const current = heartbeat?.isolatedSession;
     if (current !== true) {
-      opts.push({
+      push({
         tag: "isolated-cron",
         path: "agents.defaults.heartbeat.isolatedSession",
         current: current ?? false,
@@ -249,7 +301,7 @@ export function getOptimizations(
   // cache-ttl-pruning (balanced / aggressive, only if mode is unset)
   if (profile === "balanced" || profile === "aggressive") {
     if (!defaults?.contextPruning?.mode) {
-      opts.push({
+      push({
         tag: "cache-ttl-pruning",
         path: "agents.defaults.contextPruning.mode",
         current: defaults?.contextPruning?.mode ?? "unset",
@@ -271,7 +323,7 @@ export function getOptimizations(
         // suggest variants the user can edit — never duplicate exactly
         padded.push(`${primary}-fallback-${padded.length + 1}`);
       }
-      opts.push({
+      push({
         tag: "fallback-chain",
         path: "agents.defaults.model.fallbacks",
         current: fallbacks,
@@ -292,7 +344,7 @@ export function getOptimizations(
     {
       const cur = ch.historyLimit;
       if (typeof cur === "number" && cur > target.channelHistoryLimit) {
-        opts.push({
+        push({
           tag: "channel-history-limit",
           path: `channels.${provider}.historyLimit`,
           current: cur,
@@ -306,7 +358,7 @@ export function getOptimizations(
     {
       const cur = ch.mediaMaxMb;
       if (typeof cur === "number" && cur > target.channelMediaMax) {
-        opts.push({
+        push({
           tag: "channel-media-max",
           path: `channels.${provider}.mediaMaxMb`,
           current: cur,
@@ -320,7 +372,7 @@ export function getOptimizations(
     {
       const cur = ch.textChunkLimit;
       if (typeof cur === "number" && cur > target.channelTextChunk) {
-        opts.push({
+        push({
           tag: "channel-text-chunk",
           path: `channels.${provider}.textChunkLimit`,
           current: cur,
@@ -339,7 +391,7 @@ export function getOptimizations(
       if (isPlainObject(tb)) {
         const cur = tb.idleHours;
         if (typeof cur === "number" && cur > target.discordIdleHours) {
-          opts.push({
+          push({
             tag: "discord-idle-hours",
             path: "channels.discord.threadBindings.idleHours",
             current: cur,
@@ -369,7 +421,7 @@ export function getOptimizations(
           sample[provider] =
             provider === "discord" || provider === "telegram" ? "haiku" : "sonnet";
         }
-        opts.push({
+        push({
           tag: "channel-model-routing",
           path: "channels.modelByChannel",
           current: routing ?? "unset",
@@ -385,7 +437,7 @@ export function getOptimizations(
   {
     const toolsCur = (config.tools?.profile ?? "full") as string;
     if (toolsCur !== target.toolsProfile) {
-      opts.push({
+      push({
         tag: "tools-profile",
         path: "tools.profile",
         current: config.tools?.profile ?? "full",
@@ -415,7 +467,7 @@ export function getOptimizations(
       const safeMax = Math.max(targetMax, existingMin);
       // Only suggest if it actually lowers the cap (can't reduce below min).
       if (safeMax < current) {
-        opts.push({
+        push({
           tag: "runRetries-cap",
           path: "agents.defaults.runRetries",
           current,
@@ -432,7 +484,7 @@ export function getOptimizations(
     const channelsRaw = (config.channels ?? {}) as Record<string, any>;
     const discord = channelsRaw.discord;
     if (isPlainObject(discord) && discord.suppressEmbeds === false) {
-      opts.push({
+      push({
         tag: "discord-suppress-embeds",
         path: "channels.discord.suppressEmbeds",
         current: false,
@@ -448,7 +500,7 @@ export function getOptimizations(
     const channelsRaw = (config.channels ?? {}) as Record<string, any>;
     const slack = channelsRaw.slack;
     if (isPlainObject(slack) && slack.unfurlLinks === true) {
-      opts.push({
+      push({
         tag: "slack-unfurl-links",
         path: "channels.slack.unfurlLinks",
         current: true,
@@ -462,8 +514,13 @@ export function getOptimizations(
   return opts;
 }
 
-function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
-  const parts = opt.path.split(".");
+/**
+ * Walk a dotted config path, creating intermediate objects as needed, and set
+ * the leaf to `value`. The single shared mutation primitive so applying a live
+ * optimization and applying a stored plan proposal touch the config identically.
+ */
+function setConfigPath(config: OpenClawConfig, path: string, value: unknown): void {
+  const parts = path.split(".");
   let obj: Record<string, unknown> = config as Record<string, unknown>;
 
   for (let i = 0; i < parts.length - 1; i++) {
@@ -473,7 +530,27 @@ function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
     obj = obj[parts[i]] as Record<string, unknown>;
   }
 
-  obj[parts[parts.length - 1]] = opt.recommended;
+  obj[parts[parts.length - 1]] = value;
+}
+
+function applyOptimization(config: OpenClawConfig, opt: Optimization): void {
+  setConfigPath(config, opt.path, opt.recommended);
+}
+
+/**
+ * Apply a set of plan proposals to a config IN PLACE: set each proposal's `path`
+ * to its STORED `recommended` value, verbatim. We never recompute the value from
+ * the current config — the caller's staleness guard (a configHash match) has
+ * already proven the config hasn't drifted since the plan was generated, so the
+ * plan's recommendations are still the right ones. Uses the same path-walk as
+ * applyOptimization. Info-only proposals must be filtered out by the caller —
+ * they are suggestions and are never applied.
+ */
+export function applyProposals(
+  config: OpenClawConfig,
+  proposals: Pick<PlanProposal, "path" | "recommended">[]
+): void {
+  for (const p of proposals) setConfigPath(config, p.path, p.recommended);
 }
 
 export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> {
@@ -528,25 +605,62 @@ export async function runOpenClawOptimize(opts: OptimizeOptions): Promise<void> 
     return;
   }
 
-  // Backup
   const configPath = expandPath(opts.config);
-  const backupPath = `${configPath}.pre-optimize.bak`;
-  copyFileSync(configPath, backupPath);
-  console.log(chalk.dim(`\nBackup: ${backupPath}`));
 
-  // Apply — info-only entries are suggestions, never auto-written
+  // Apply — info-only entries are suggestions, never auto-written.
   const applicable = optimizations.filter((o) => !o.info);
   const skippedInfo = optimizations.length - applicable.length;
 
-  for (const opt of applicable) {
-    applyOptimization(config, opt);
+  // Nothing applicable (only info-only suggestions) — don't rewrite the file at
+  // all. A no-op rewrite would needlessly re-serialize (and strip any JSON5
+  // comments from) a config we aren't actually changing.
+  if (applicable.length === 0) {
+    console.log(chalk.green("\n✓ No applicable optimizations to write"));
+    if (skippedInfo > 0) {
+      console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+    }
+    return;
   }
 
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(chalk.green(`\n✓ Applied ${applicable.length} optimization(s)`));
-  if (skippedInfo > 0) {
-    console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+  // JSON5-rewrite detection: OpenClaw configs may use JSON5 (comments, trailing
+  // commas). We write plain JSON, so warn the user their original formatting is
+  // rewritten — the backup preserves the original bytes. Never blocks the apply.
+  try {
+    JSON.parse(readFileSync(configPath, "utf-8"));
+  } catch {
+    console.log(
+      chalk.yellow(
+        "\n⚠ Source config uses JSON5 comments/formatting — apply rewrites it as plain JSON. The backup preserves the original."
+      )
+    );
   }
-  console.log(chalk.dim("Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-  console.log(chalk.dim("Something wrong? Rollback with: agent-optimizer rollback"));
+
+  // Route through the transactional engine: snapshot → mutate → verify →
+  // auto-rollback on failure. The store IS the backup now (no more sidecar).
+  try {
+    const result = transactionalApply({
+      files: [configPath],
+      backupsDir: opts.backupsDir,
+      mutate: () => {
+        for (const opt of applicable) applyOptimization(config, opt);
+        // Atomic (temp + rename), matching applyFixes/savePlan/backups: an
+        // interrupted direct write could truncate the live config a concurrently
+        // reading gateway sees. rename swaps it in whole (the store backup still
+        // wraps this for verify/rollback).
+        const tmp = `${configPath}.tmp-${process.pid}`;
+        writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n");
+        renameSync(tmp, configPath);
+      },
+    });
+
+    console.log(chalk.green(`\n✓ Applied ${applicable.length} optimization(s)`));
+    if (skippedInfo > 0) {
+      console.log(chalk.dim(`  (${skippedInfo} info-only suggestion${skippedInfo === 1 ? "" : "s"} shown above — not auto-applied)`));
+    }
+    console.log(formatApplySuccess(result.backupId));
+  } catch (err) {
+    const { text, exitCode } = formatApplyError(err);
+    console.log(text);
+    process.exitCode = exitCode;
+  }
 }

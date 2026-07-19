@@ -5,6 +5,7 @@ import { loadConfig, findAgentDir, detectOpenClawVersion } from "../utils/config
 import { detectSystems } from "../detect/index.js";
 import { runOpenClawAuditors } from "./openclaw/index.js";
 import { runClaudeCodeAuditors } from "./claude-code/index.js";
+import { stampFindingIds } from "../utils/finding-id.js";
 
 export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): Promise<AuditReport> {
   // Only animate spinners on an interactive TTY — piped/redirected output
@@ -69,19 +70,24 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
     results.push(...runClaudeCodeAuditors(ccSystems));
   }
 
+  // Stamp stable ids + machineFixable onto every result before it leaves here, so
+  // `audit --json` (a straight JSON.stringify of this report) carries them.
+  const stamped = stampFindingIds(results);
+
   const summary = {
-    total: results.length,
-    pass: results.filter((r) => r.status === "pass").length,
-    warn: results.filter((r) => r.status === "warn").length,
-    fail: results.filter((r) => r.status === "fail").length,
+    total: stamped.length,
+    pass: stamped.filter((r) => r.status === "pass").length,
+    warn: stamped.filter((r) => r.status === "warn").length,
+    fail: stamped.filter((r) => r.status === "fail").length,
   };
 
   return {
+    schemaVersion: 1,
     timestamp: new Date().toISOString(),
     host: "localhost",
     systems,
     openclawVersion,
-    results,
+    results: stamped,
     summary,
   };
 }

@@ -3,6 +3,7 @@ import { join, resolve, basename, dirname } from "path";
 import chalk from "chalk";
 import type { AuditResult } from "../../types.js";
 import { expandPath, loadConfig, findWorkspace } from "../../utils/config.js";
+import { sanitizeUntrusted, sanitizeList } from "../../utils/untrusted.js";
 
 // --- Pattern definitions ---
 
@@ -119,12 +120,14 @@ function scanFileDetailed(filePath: string): { hits: FileHit[]; urls: string[] }
   for (let i = 0; i < lines.length; i++) {
     for (const def of SUSPICIOUS_PATTERNS) {
       if (def.pattern.test(lines[i])) {
+        // Match on raw `lines[i]` above; store only sanitized copies so every
+        // downstream check/message built from a hit is control- and escape-free.
         hits.push({
-          pattern: def.label,
+          pattern: sanitizeUntrusted(def.label),
           severity: def.severity,
           category: def.category,
           line: i + 1,
-          content: lines[i].trim().slice(0, 120),
+          content: sanitizeUntrusted(lines[i], 120),
         });
       }
     }
@@ -244,16 +247,24 @@ function scanSkillDirectory(skillDir: string): SkillReport {
     } catch { /* skip */ }
   }
 
+  // Single collection choke point: name/urls/riskyDeps/executableFiles are
+  // attacker-controlled scanned content that flows into agent-facing check/message
+  // strings, so sanitize them here — every downstream site is clean and none can
+  // forget. Pattern matching, safe-domain filtering (extractUrls) and risky-dep
+  // matching (checkDependencies) already ran on the raw values; sanitizing changes
+  // only string content, not array .length, so scoreSkill's counts are unaffected.
+  // scoreReason is derived from the now-sanitized riskyDeps below, so it is clean
+  // automatically. `dependencies` is never displayed and is left raw.
   const report: SkillReport = {
-    name,
+    name: sanitizeUntrusted(name),
     path: skillDir,
     source,
     files: fileCount,
     hits: allHits,
-    urls: [...new Set(allUrls)],
+    urls: sanitizeList([...new Set(allUrls)]),
     dependencies: deps,
-    riskyDeps: risky,
-    executableFiles: executables,
+    riskyDeps: sanitizeList(risky),
+    executableFiles: sanitizeList(executables),
     score: "clean",
     scoreReason: "",
     truncated,
@@ -275,6 +286,22 @@ export async function runSecurityScan(opts: {
   extensionsDir?: string;
 }): Promise<AuditResult[]> {
   const results: AuditResult[] = [];
+
+  // Emission boundary for scanned third-party content. Every untrusted result's
+  // display strings (check, message, AND fix) pass through the sanitizer here, so
+  // no report field or raw filesystem path — including one added by a future edit
+  // — can carry a terminal escape, control char, or newline to the terminal
+  // reporter or an agent. Idempotent, so double-sanitizing already-clean
+  // collection-point values is harmless.
+  const pushUntrusted = (r: AuditResult): void => {
+    results.push({
+      ...r,
+      check: sanitizeUntrusted(r.check),
+      message: sanitizeUntrusted(r.message),
+      fix: r.fix === undefined ? undefined : sanitizeUntrusted(r.fix),
+    });
+  };
+
   const config = loadConfig(opts.config);
 
   const workspace = opts.workspace ?? (config ? findWorkspace(config) : "~/.openclaw/workspace");
@@ -343,9 +370,10 @@ export async function runSecurityScan(opts: {
         const provenance = report.source === "clawhub" ? " [ClawHub]" : report.source === "local" ? " [local]" : "";
 
         // Main score result
-        results.push({
+        pushUntrusted({
           category: `${label} Scan`,
           check: `${report.name}${provenance}`,
+          untrusted: true,
           status: STATUS_MAP[report.score],
           message: `${report.scoreReason} (${report.files} files scanned${report.truncated ? `, capped at ${report.files} — very large tree, coverage incomplete` : ""})`,
           fix: report.score === "dangerous"
@@ -357,9 +385,10 @@ export async function runSecurityScan(opts: {
 
         // Detail: risky dependencies
         if (report.riskyDeps.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: risky dependencies`,
+            untrusted: true,
             status: "fail",
             message: `Known risky packages: ${report.riskyDeps.join(", ")}`,
             fix: "Remove or replace these dependencies",
@@ -368,9 +397,10 @@ export async function runSecurityScan(opts: {
 
         // Detail: executable files
         if (report.executableFiles.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: executable files`,
+            untrusted: true,
             status: "warn",
             message: `${report.executableFiles.length} executable file(s): ${report.executableFiles.slice(0, 5).join(", ")}${report.executableFiles.length > 5 ? ` +${report.executableFiles.length - 5} more` : ""}`,
             fix: "Review why these files have execute permissions",
@@ -379,9 +409,10 @@ export async function runSecurityScan(opts: {
 
         // Detail: external URLs
         if (report.urls.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: external URLs`,
+            untrusted: true,
             status: report.urls.length > 5 ? "warn" : "info",
             message: `${report.urls.length} external URL(s): ${report.urls.slice(0, 3).join(", ")}${report.urls.length > 3 ? ` +${report.urls.length - 3} more` : ""}`,
           });
@@ -391,9 +422,10 @@ export async function runSecurityScan(opts: {
         const highHits = report.hits.filter((h) => h.severity === "high");
         if (highHits.length > 0) {
           const uniquePatterns = [...new Set(highHits.map((h) => h.pattern))];
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: high-severity patterns`,
+            untrusted: true,
             status: "fail",
             message: uniquePatterns.join(", "),
             fix: `Review: ${fullPath.replace(expandPath("~/"), "~/")}`,

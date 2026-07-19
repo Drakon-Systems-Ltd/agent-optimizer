@@ -4,8 +4,18 @@ import { homedir } from "os";
 import chalk from "chalk";
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 import { expandPath, loadConfig } from "../../utils/config.js";
+import { agentOptimizerHome } from "../../utils/paths.js";
 
-const SNAPSHOT_DIR = join(homedir(), ".agent-optimizer", "snapshots");
+/**
+ * Default per-user snapshots store (~/.agent-optimizer/snapshots), resolved from
+ * the single-source-of-truth home helper. Each public function takes the store
+ * dir as an optional trailing arg (defaulting here), mirroring the injectable-dir
+ * pattern used by defaultPlansDir()/defaultBackupsDir() so tests can redirect the
+ * writes to a scratch dir and never touch the real home.
+ */
+export function defaultSnapshotsDir(): string {
+  return join(agentOptimizerHome(), "snapshots");
+}
 
 interface Snapshot {
   timestamp: string;
@@ -14,21 +24,25 @@ interface Snapshot {
   config: OpenClawConfig;
 }
 
-function getSnapshotPath(name: string): string {
-  return join(SNAPSHOT_DIR, `${name}.json`);
+function getSnapshotPath(name: string, snapshotsDir: string): string {
+  return join(snapshotsDir, `${name}.json`);
 }
 
 /**
  * Save a golden config snapshot.
  */
-export function saveSnapshot(configPath: string, name: string): void {
+export function saveSnapshot(
+  configPath: string,
+  name: string,
+  snapshotsDir = defaultSnapshotsDir()
+): void {
   const config = loadConfig(configPath);
   if (!config) {
     console.error(`Config not found: ${configPath}`);
     process.exit(1);
   }
 
-  mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  mkdirSync(snapshotsDir, { recursive: true });
 
   const snapshot: Snapshot = {
     timestamp: new Date().toISOString(),
@@ -37,9 +51,9 @@ export function saveSnapshot(configPath: string, name: string): void {
     config,
   };
 
-  writeFileSync(getSnapshotPath(name), JSON.stringify(snapshot, null, 2), { mode: 0o600 });
+  writeFileSync(getSnapshotPath(name, snapshotsDir), JSON.stringify(snapshot, null, 2), { mode: 0o600 });
   console.log(chalk.green(`\n✓ Snapshot saved: ${name}`));
-  console.log(chalk.dim(`  Path: ${getSnapshotPath(name)}`));
+  console.log(chalk.dim(`  Path: ${getSnapshotPath(name, snapshotsDir)}`));
   console.log(chalk.dim(`  Config: ${expandPath(configPath)}`));
   console.log(chalk.dim(`  Time: ${snapshot.timestamp}\n`));
 }
@@ -47,14 +61,14 @@ export function saveSnapshot(configPath: string, name: string): void {
 /**
  * List saved snapshots.
  */
-export function listSnapshots(): void {
-  if (!existsSync(SNAPSHOT_DIR)) {
+export function listSnapshots(snapshotsDir = defaultSnapshotsDir()): void {
+  if (!existsSync(snapshotsDir)) {
     console.log(chalk.yellow("\nNo snapshots saved yet."));
     console.log(chalk.dim("Create one: agent-optimizer snapshot save --name my-golden-config\n"));
     return;
   }
 
-  const files = (readdirSync(SNAPSHOT_DIR) as string[]).filter((f: string) => f.endsWith(".json"));
+  const files = (readdirSync(snapshotsDir) as string[]).filter((f: string) => f.endsWith(".json"));
 
   if (files.length === 0) {
     console.log(chalk.yellow("\nNo snapshots saved yet."));
@@ -66,7 +80,7 @@ export function listSnapshots(): void {
   for (const file of files) {
     const name = file.replace(".json", "");
     try {
-      const snap = JSON.parse(readFileSync(join(SNAPSHOT_DIR, file), "utf-8")) as Snapshot;
+      const snap = JSON.parse(readFileSync(join(snapshotsDir, file), "utf-8")) as Snapshot;
       const age = Math.round((Date.now() - new Date(snap.timestamp).getTime()) / 86400000);
       console.log(`  ${chalk.white(name.padEnd(25))} ${chalk.dim(snap.timestamp)} (${age}d ago)`);
     } catch {
@@ -79,9 +93,13 @@ export function listSnapshots(): void {
 /**
  * Compare current config against a saved snapshot.
  */
-export function detectDrift(configPath: string, snapshotName: string): AuditResult[] {
+export function detectDrift(
+  configPath: string,
+  snapshotName: string,
+  snapshotsDir = defaultSnapshotsDir()
+): AuditResult[] {
   const results: AuditResult[] = [];
-  const snapPath = getSnapshotPath(snapshotName);
+  const snapPath = getSnapshotPath(snapshotName, snapshotsDir);
 
   if (!existsSync(snapPath)) {
     results.push({

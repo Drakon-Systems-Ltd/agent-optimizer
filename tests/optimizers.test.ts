@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { join } from "path";
 import type { OpenClawConfig } from "../src/types.js";
 import { getOptimizations, OPTIMIZATION_TAGS } from "../src/optimizers/index.js";
+import { runOpenClawOptimize } from "../src/optimizers/openclaw/index.js";
+import { listBackups } from "../src/utils/backups.js";
 
 // ── Back-compat: existing 5 dimensions still behave correctly ──────
 describe("getOptimizations — back-compat (existing 5 dimensions)", () => {
@@ -506,6 +510,25 @@ describe("getOptimizations — slack-unfurl-links (info-only)", () => {
   });
 });
 
+describe("getOptimizations — risk + requiresRestart metadata", () => {
+  it("every optimization carries risk and requiresRestart metadata", () => {
+    const config: OpenClawConfig = {
+      agents: { defaults: { contextTokens: 1000000, heartbeat: { every: "30m" } } },
+    };
+    const opts = getOptimizations(config, "balanced");
+    expect(opts.length).toBeGreaterThan(0);
+    for (const o of opts) {
+      expect(["low", "medium", "high"]).toContain(o.risk);
+      expect(typeof o.requiresRestart).toBe("boolean");
+    }
+    // Pin one exact value so the map can't silently drift to all-defaults.
+    expect(opts.find((o) => o.tag === "context")).toMatchObject({
+      risk: "low",
+      requiresRestart: false,
+    });
+  });
+});
+
 describe("OPTIMIZATION_TAGS", () => {
   it("includes all 20 dimensions", () => {
     expect(OPTIMIZATION_TAGS.length).toBe(20);
@@ -515,5 +538,122 @@ describe("OPTIMIZATION_TAGS", () => {
     expect(OPTIMIZATION_TAGS).toContain("runRetries-cap");
     expect(OPTIMIZATION_TAGS).toContain("discord-suppress-embeds");
     expect(OPTIMIZATION_TAGS).toContain("slack-unfurl-links");
+  });
+});
+
+// ── Apply path: routed through the transactional backup store ──────────
+describe("runOpenClawOptimize — transactional apply", () => {
+  const DIR = join(process.cwd(), "__test_optimize_apply__");
+  const CFG = join(DIR, "openclaw.json");
+  // Store lives under DIR so it (and the derived apply.lock) is torn down here;
+  // nothing ever touches the real ~/.agent-optimizer.
+  const STORE = join(DIR, "store");
+  const LOCK = join(DIR, "apply.lock"); // = dirname(resolve(STORE))/apply.lock
+  let logSpy: ReturnType<typeof vi.spyOn>;
+  let prevExitCode: typeof process.exitCode;
+
+  // A config that triggers real applicable optimizations on `aggressive`
+  // (contextTokens 1M → 100k) and carries a valid primary so the baseline is clean.
+  const VALID = {
+    agents: {
+      defaults: {
+        model: { primary: "anthropic/claude-opus-4-8", fallbacks: ["openai/gpt-5.6"] },
+        contextTokens: 1000000,
+      },
+    },
+  };
+
+  beforeEach(() => {
+    rmSync(DIR, { recursive: true, force: true });
+    mkdirSync(DIR, { recursive: true });
+    prevExitCode = process.exitCode;
+    process.exitCode = undefined;
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    logSpy.mockRestore();
+    process.exitCode = prevExitCode;
+    rmSync(DIR, { recursive: true, force: true });
+  });
+
+  const logged = () => logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+
+  it("applies, writes a store backup (not a sidecar), and leaves a clean config", async () => {
+    writeFileSync(CFG, JSON.stringify(VALID, null, 2));
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
+
+    // The change landed on disk.
+    expect(JSON.parse(readFileSync(CFG, "utf-8")).agents.defaults.contextTokens).toBe(100000);
+    // A single store generation snapshots the config; the old sidecar is gone.
+    const gens = listBackups(STORE);
+    expect(gens).toHaveLength(1);
+    expect(gens[0].files).toEqual(["openclaw.json"]);
+    expect(existsSync(`${CFG}.pre-optimize.bak`)).toBe(false);
+    // Success path prints the backup id and does not set a failing exit code.
+    expect(logged()).toContain(gens[0].id);
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it("warns about JSON5 rewrite but still applies (backup preserves the original)", async () => {
+    // Valid JSON5 (comment) — parses via the JSON5 path, throws under strict JSON.
+    const json5 = `{\n  // heavy context\n  "agents": { "defaults": { "model": { "primary": "anthropic/claude-opus-4-8", "fallbacks": ["openai/gpt-5.6"] }, "contextTokens": 1000000 } }\n}`;
+    writeFileSync(CFG, json5);
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
+
+    expect(logged()).toContain("JSON5");
+    // The file is now plain JSON (the comment is gone) and reflects the change.
+    const rewritten = readFileSync(CFG, "utf-8");
+    expect(rewritten).not.toContain("// heavy context");
+    expect(JSON.parse(rewritten).agents.defaults.contextTokens).toBe(100000);
+    // The backup captured the ORIGINAL JSON5 bytes.
+    const gens = listBackups(STORE);
+    expect(gens).toHaveLength(1);
+  });
+
+  it("surfaces a locked apply: config untouched, no backup, exit 1", async () => {
+    const original = JSON.stringify(VALID, null, 2);
+    writeFileSync(CFG, original);
+    // Pre-hold a FRESH lock at the derived lock dir so acquireLock refuses.
+    mkdirSync(LOCK, { recursive: true });
+    writeFileSync(join(LOCK, "lock.json"), JSON.stringify({ pid: 999999, startedAt: Date.now() }));
+
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
+
+    // The optimizer caught the ApplyLockedError, formatted it, and set exit 1.
+    expect(process.exitCode).toBe(1);
+    expect(logged()).toContain("Another apply is already in progress");
+    // Nothing was written or backed up.
+    expect(readFileSync(CFG, "utf-8")).toBe(original);
+    expect(listBackups(STORE)).toHaveLength(0);
+  });
+
+  it("does not rewrite or back up the file when only info-only suggestions apply", async () => {
+    // Tuned so aggressive fires ONLY info-only optimizations (fallback-chain,
+    // runRetries-cap) and nothing applicable — every writable dimension already
+    // sits at/under its aggressive target.
+    const onlyInfo = {
+      agents: {
+        defaults: {
+          model: { primary: "anthropic/claude-opus-4-8", fallbacks: ["openai/gpt-5.6"] },
+          contextTokens: 100000,
+          heartbeat: { every: "12h", isolatedSession: true },
+          subagents: { maxConcurrent: 2 },
+          compaction: { mode: "safeguard" },
+          contextPruning: { mode: "cache-ttl" },
+          imageMaxDimensionPx: 800,
+          bootstrapMaxChars: 10000,
+          bootstrapTotalMaxChars: 100000,
+        },
+      },
+      tools: { profile: "minimal" },
+    };
+    // Deliberately unusual formatting (single line) so a re-serialize would change bytes.
+    const original = JSON.stringify(onlyInfo);
+    writeFileSync(CFG, original);
+    await runOpenClawOptimize({ config: CFG, profile: "aggressive", backupsDir: STORE });
+
+    // Byte-identical (no re-serialize) and no backup generation created.
+    expect(readFileSync(CFG, "utf-8")).toBe(original);
+    expect(listBackups(STORE)).toHaveLength(0);
   });
 });

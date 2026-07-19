@@ -3,7 +3,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { runFullAudit } from "./auditors/index.js";
-import { generateReport, printBanner, printScanResults } from "./reporters/index.js";
+import { stampFindingIds } from "./utils/finding-id.js";
+import { generateReport, printBanner, printScanResults, buildScanReport } from "./reporters/index.js";
 import {
   enrollMonitor,
   runMonitor,
@@ -22,6 +23,9 @@ import {
   PRICING,
 } from "./licensing/index.js";
 import type { License, LicenseData } from "./licensing/index.js";
+import { emitPlanError } from "./utils/cli-json.js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -55,7 +59,7 @@ program
       d("  LICENSED") + d(" (Solo £29+)"),
       `    ${w("audit --fix")}                              ${d("Auto-apply safe fixes")}`,
       `    ${w("optimize")} ${d("[--profile] [--only] [--skip]")}   ${d("Apply optimizations")}`,
-      `    ${w("rollback")}                                 ${d("Restore pre-optimize backup")}`,
+      `    ${w("rollback")} ${d("[--list] [--to <id>]")}              ${d("Restore a backup generation")}`,
       "",
       d("  FLEET") + d(" (£79+)"),
       `    ${w("fleet")} ${d("--hosts a,b,c [--json]")}             ${d("SSH fleet audit")}`,
@@ -118,7 +122,8 @@ function printUpgradePrompt(feature: string): void {
 function printFixSummary(
   result: import("./fixers/index.js").FixApplyResult,
   manualCount: number,
-  out: (msg: string) => void = console.log
+  out: (msg: string) => void = console.log,
+  applySuccess?: (backupId: string) => string
 ): void {
   if (result.applied === 0) {
     out(chalk.dim("\n  No changes written (fixes were already applied or files unavailable)."));
@@ -139,13 +144,13 @@ function printFixSummary(
     );
     for (const f of result.files) {
       out(`    ${chalk.green("✓")} ${f.file} ${chalk.dim(`(${f.opsApplied} change${f.opsApplied === 1 ? "" : "s"})`)}`);
-      out(chalk.dim(`      backup: ${f.backup}`));
-      out(chalk.dim(`      undo:   cp "${f.backup}" "${f.file}"`));
     }
-    // `rollback` restores the openclaw.json only; per-file cp commands above cover
-    // every touched file (including models.json), so point users there.
-    out(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway"));
-    out(chalk.dim("  Undo: run the per-file cp command(s) above, or `agent-optimizer rollback` for the config."));
+    // The backup generation snapshots every touched file (config + models.json),
+    // so a single restore brings them all back atomically. Shared footer keeps
+    // this identical to the optimize-apply success output.
+    if (result.backupId && applySuccess) {
+      out(applySuccess(result.backupId));
+    }
   }
 
   if (manualCount > 0) {
@@ -458,7 +463,8 @@ program
       const out = opts.json ? console.error : console.log;
       const { applyFixes, findingsWithFixes, autoFixableWithoutPayload } =
         await import("./fixers/index.js");
-      const { loadConfig, findAgentDir, expandPath } = await import("./utils/config.js");
+      const { loadConfig, findAgentDir } = await import("./utils/config.js");
+      const { formatApplyError, formatApplySuccess } = await import("./utils/apply-errors.js");
 
       const fixable = findingsWithFixes(results);
       const manual = autoFixableWithoutPayload(results);
@@ -473,15 +479,15 @@ program
 
       const config = loadConfig(opts.config);
       const agentDir = opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
-      const configFull = expandPath(opts.config);
       try {
         const result = applyFixes(results, { configPath: opts.config, agentDir, dryRun: !!opts.dryRun });
-        printFixSummary(result, manual, out);
+        printFixSummary(result, manual, out, formatApplySuccess);
       } catch (err) {
-        out(chalk.red(`\n  ✗ Fix application failed partway: ${(err as Error).message}`));
-        out(chalk.dim("  Any file already written has a .pre-fix.bak alongside it — restore with:"));
-        out(chalk.dim(`    cp "${configFull}.pre-fix.bak" "${configFull}"`));
-        process.exitCode = 1;
+        // The four transactionalApply errors (rolled-back / rollback-failed /
+        // locked / precondition) get the shared human formatting + exit code.
+        const { text, exitCode } = formatApplyError(err);
+        out(text);
+        process.exitCode = exitCode;
       }
     }
   });
@@ -497,10 +503,22 @@ program
     "~/.openclaw/openclaw.json"
   )
   .option("--workspace <path>", "Path to workspace directory")
+  .option("--json", "Output results as JSON (banner to stderr; no license nag)")
   .action(async (opts) => {
+    const { runSecurityScan } = await import("./auditors/openclaw/security-scan.js");
+
+    if (opts.json) {
+      // Machine path: banner to stderr, PURE JSON on stdout (id-stamped results +
+      // status summary). No human table, no license nag — `scan --json | jq` must
+      // parse. `untrusted: true` on third-party findings is preserved faithfully.
+      printBanner(true);
+      const results = await runSecurityScan(opts);
+      console.log(JSON.stringify(buildScanReport(results), null, 2));
+      return;
+    }
+
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("security scan\n"));
-    const { runSecurityScan } = await import("./auditors/openclaw/security-scan.js");
     const results = await runSecurityScan(opts);
 
     printScanResults(results);
@@ -529,13 +547,23 @@ program
   )
   .option("--dry-run", "Preview changes without applying")
   .option(
+    "--plan",
+    "Emit a persisted machine-readable plan as JSON on stdout (free, read-only)"
+  )
+  .option(
+    "--apply-plan <id>",
+    "Apply a persisted plan by id, transactionally, with a config-drift guard (licensed, mutates). Pure JSON on stdout. In this mode --only selects PROPOSAL IDS, not tags."
+  )
+  .option(
     "--profile <name>",
     "Optimization profile: minimal | balanced | aggressive",
     "balanced"
   )
   .option(
+    // Mode-dependent: in the normal optimize path these are TAGS; with
+    // --apply-plan they are PROPOSAL IDS (e.g. p1-context,p3-heartbeat).
     "--only <tags>",
-    "Only apply these optimizations (comma-separated: context,heartbeat,subagents,compaction,pruning)"
+    "Only apply these optimizations (comma-separated tags: context,heartbeat,subagents,compaction,pruning). With --apply-plan: comma-separated PROPOSAL IDS instead."
   )
   .option(
     "--skip <tags>",
@@ -545,7 +573,52 @@ program
     "--system <kind>",
     "Target system: claude-code | openclaw (auto-detected if omitted)"
   )
+  .option(
+    // Accepted-and-ignored: --plan and --apply-plan are ALWAYS-JSON machine verbs,
+    // so a redundant --json (Task 11/12's documented invocation) is absorbed rather
+    // than rejected by commander (which would emit "unknown option" + exit 1, an
+    // error an agent can't distinguish from a real failure). Output is unchanged.
+    "--json",
+    "Accepted for the machine verbs (--plan / --apply-plan already emit JSON); ignored otherwise"
+  )
   .action(async (opts) => {
+    if (opts.plan) {
+      // Free, read-only: no license check. Stdout carries pure JSON (the
+      // persisted plan, byte-for-byte); everything human goes to stderr.
+      printBanner(true);
+      const { buildPlan, savePlan } = await import("./optimizers/plan.js");
+      try {
+        const plan = buildPlan(opts.config, opts.profile);
+        const file = savePlan(plan);
+        console.error(chalk.dim(`  plan saved: ${file}\n`));
+        console.log(JSON.stringify(plan, null, 2));
+      } catch (err) {
+        // Shared envelope so --plan and --apply-plan errors read identically.
+        emitPlanError("plan-failed", (err as Error).message, { configPath: opts.config });
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (opts.applyPlan) {
+      // Apply-plan is the agent-facing MACHINE path: pure JSON on stdout, banner
+      // and any human text to stderr — exactly like --plan. It MUTATES, so it is
+      // license-gated (runApplyPlan enforces this via the injected `licensed`).
+      printBanner(true);
+      const { runApplyPlan } = await import("./optimizers/apply-plan.js");
+      const { json, exitCode } = runApplyPlan({
+        config: opts.config,
+        applyPlan: opts.applyPlan,
+        // Raw --only string: in apply-plan mode these are PROPOSAL IDS, not tags.
+        // runApplyPlan splits/validates them against the plan.
+        only: opts.only,
+        licensed: !!hasValidLicense(),
+      });
+      console.log(JSON.stringify(json, null, 2));
+      if (exitCode !== 0) process.exit(exitCode);
+      return;
+    }
+
     const licensed = hasValidLicense();
     const effectiveDryRun = opts.dryRun || !licensed;
 
@@ -583,86 +656,135 @@ program
 
 program
   .command("rollback")
-  .description("Restore config from the last optimize/fix backup")
+  .description("Restore config from a backup generation (store, with legacy sidecar fallback)")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
     "~/.openclaw/openclaw.json"
   )
+  .option("--list", "List the backup generations that touch this config")
+  .option("--to <id>", "Restore a specific backup generation by id")
+  .option("--json", "Output as JSON (banner to stderr; structured per mode)")
   .action(async (opts) => {
-    const { existsSync, copyFileSync, readFileSync, statSync } = await import("fs");
-    const { expandPath } = await import("./utils/config.js");
+    const { runRollback } = await import("./utils/rollback.js");
 
-    const configPath = expandPath(opts.config);
-    // Restore from whichever backup is newest: optimize writes .pre-optimize.bak,
-    // `audit --fix` writes .pre-fix.bak.
-    const candidates = [`${configPath}.pre-fix.bak`, `${configPath}.pre-optimize.bak`].filter(
-      (p) => existsSync(p)
-    );
+    if (opts.json) {
+      // Machine path: banner to stderr, PURE JSON on stdout. runRollback builds a
+      // structured result per mode (list / restore / error) instead of printing.
+      printBanner(true);
+      const { exitCode, json } = runRollback({
+        config: opts.config,
+        list: opts.list,
+        to: opts.to,
+        json: true,
+      });
+      console.log(JSON.stringify(json, null, 2));
+      if (exitCode) process.exitCode = exitCode;
+      return;
+    }
 
     printBanner();
     console.log(chalk.dim("  mode: ") + chalk.white("rollback\n"));
 
-    if (candidates.length === 0) {
-      console.log(chalk.yellow("  No backup found."));
-      console.log(chalk.dim(`  Expected: ${configPath}.pre-optimize.bak or ${configPath}.pre-fix.bak`));
-      console.log(chalk.dim("  Backups are created automatically by: agent-optimizer optimize  /  agent-optimizer audit --fix\n"));
-      process.exit(1);
-    }
+    const { exitCode } = runRollback({ config: opts.config, list: opts.list, to: opts.to });
+    console.log();
+    if (exitCode) process.exitCode = exitCode;
+  });
 
-    const backupPath = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+// --- Plugin install (ship the OpenClaw plugin with one command) ---
 
-    // Show what's different
+const plugin = program
+  .command("plugin")
+  .description("Manage the bundled Agent Optimizer OpenClaw plugin");
+
+plugin
+  .command("install")
+  .description("Install the bundled OpenClaw plugin into your extensions directory")
+  .option(
+    "--enable",
+    'Also enable it: add "agent-optimizer" to plugins.allow in your openclaw config (transactional, auto-rollback)'
+  )
+  .option(
+    "--extensions-dir <path>",
+    "OpenClaw extensions directory",
+    "~/.openclaw/extensions"
+  )
+  .option(
+    "-c, --config <path>",
+    "Path to openclaw.json (only touched with --enable)",
+    "~/.openclaw/openclaw.json"
+  )
+  .action(async (opts: { enable?: boolean; extensionsDir: string; config: string }) => {
+    printBanner();
+    console.log(chalk.dim("  mode: ") + chalk.white("plugin install\n"));
+
+    const { installPlugin, resolveBundledPluginDir, PluginSourceError } = await import(
+      "./plugin-install.js"
+    );
+    const { formatApplyError } = await import("./utils/apply-errors.js");
+
+    const bundledPluginDir = resolveBundledPluginDir(dirname(fileURLToPath(import.meta.url)));
+
+    const TOOLS =
+      "optimizer_audit, optimizer_plan, optimizer_apply, optimizer_rollback, optimizer_scan";
+
     try {
-      const current = JSON.parse(readFileSync(configPath, "utf-8"));
-      const backup = JSON.parse(readFileSync(backupPath, "utf-8"));
+      const result = installPlugin({
+        bundledPluginDir,
+        extensionsDir: opts.extensionsDir,
+        enable: !!opts.enable,
+        configPath: opts.config,
+      });
 
-      const currentCtx = current.agents?.defaults?.contextTokens;
-      const backupCtx = backup.agents?.defaults?.contextTokens;
-      const currentHb = current.agents?.defaults?.heartbeat?.every;
-      const backupHb = backup.agents?.defaults?.heartbeat?.every;
+      console.log(chalk.green(`  ✓ Installed plugin → ${result.installedTo}`));
+      console.log(chalk.dim(`    files: ${result.files.join(", ")}`));
 
-      if (currentCtx !== backupCtx || currentHb !== backupHb) {
-        console.log("  Changes that will be reverted:");
-        if (currentCtx !== backupCtx) {
-          console.log(`    contextTokens: ${currentCtx} → ${backupCtx}`);
-        }
-        if (currentHb !== backupHb) {
-          console.log(`    heartbeat: ${currentHb} → ${backupHb}`);
-        }
-        console.log();
+      if (!opts.enable) {
+        console.log(chalk.bold("\n  Not yet enabled. To turn it on:"));
+        console.log(`    ${chalk.red("1.")} Add ${chalk.white('"agent-optimizer"')} to ${chalk.white("plugins.allow")} in ${chalk.dim(opts.config)}`);
+        console.log(`    ${chalk.red("2.")} Restart the gateway: ${chalk.dim("systemctl --user restart openclaw-gateway")}`);
+        console.log(chalk.dim("    Or let me do step 1 for you (transactional, auto-rollback):"));
+        console.log(`      ${chalk.white("agent-optimizer plugin install --enable")}`);
+        console.log(chalk.dim(`\n  Once enabled, 5 tools are available: ${TOOLS}`));
+        console.log(chalk.dim("  (optimizer_apply + optimizer_rollback are approval-gated: allow-once / deny)\n"));
+        return;
       }
-    } catch {
-      // Can't diff — just restore
-    }
 
-    // Restore the config
-    copyFileSync(backupPath, configPath);
-    console.log(chalk.green("  ✓ Config restored from backup"));
-    console.log(chalk.dim(`  Restored: ${configPath}`));
-    console.log(chalk.dim(`  From:     ${backupPath}`));
-
-    // `audit --fix` can also edit models.json — restore its backup too so the
-    // undo is complete (the fix summary's "rollback" pointer stays honest).
-    try {
-      const { resolve } = await import("path");
-      const { loadConfig, findAgentDir } = await import("./utils/config.js");
-      const restored = loadConfig(opts.config);
-      const agentDir = restored ? findAgentDir(restored) : null;
-      if (agentDir) {
-        const modelsPath = resolve(expandPath(agentDir), "models.json");
-        const modelsBackup = `${modelsPath}.pre-fix.bak`;
-        if (existsSync(modelsBackup)) {
-          copyFileSync(modelsBackup, modelsPath);
-          console.log(chalk.green("  ✓ models.json restored from backup"));
-          console.log(chalk.dim(`  Restored: ${modelsPath}`));
-        }
+      if (result.alreadyEnabled) {
+        console.log(
+          chalk.dim(
+            `\n  • Already enabled — "agent-optimizer" is in plugins.allow (${result.configPath}). No config change needed.`
+          )
+        );
+      } else {
+        console.log(
+          chalk.green(`\n  ✓ Enabled — added "agent-optimizer" to plugins.allow in ${result.configPath}`)
+        );
+        console.log(
+          chalk.dim(
+            `    backup: ${result.backupId}  (undo: agent-optimizer rollback --to ${result.backupId})`
+          )
+        );
       }
-    } catch {
-      // models.json restore is best-effort — the config restore already succeeded.
-    }
 
-    console.log(chalk.dim("\n  Restart the gateway to apply: systemctl --user restart openclaw-gateway\n"));
+      console.log(chalk.bold("\n  Next steps:"));
+      console.log(chalk.dim("    • Restart the gateway: systemctl --user restart openclaw-gateway"));
+      console.log(chalk.dim(`    • 5 tools now available: ${TOOLS}`));
+      console.log(chalk.dim("    • optimizer_apply + optimizer_rollback are approval-gated (allow-once / deny)\n"));
+    } catch (err) {
+      if (err instanceof PluginSourceError) {
+        // Broken/absent bundled source (most often: dist not built) — actionable
+        // message, no transactional formatting.
+        console.log(chalk.red(`\n  ✗ ${err.message}\n`));
+        process.exitCode = 1;
+        return;
+      }
+      // A --enable failure came through transactionalApply — reuse the shared
+      // human formatting + exit code (identical to audit --fix / optimize apply).
+      const { text, exitCode } = formatApplyError(err);
+      console.log(text);
+      process.exitCode = exitCode;
+    }
   });
 
 // --- Snapshot & drift ---
@@ -704,13 +826,17 @@ program
     "~/.openclaw/openclaw.json"
   )
   .option("--name <name>", "Snapshot name to compare against", "golden")
+  .option("--json", "Output results as JSON")
   .action(async (opts) => {
-    printBanner();
-    console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
+    printBanner(!!opts.json);
+    if (!opts.json) console.log(chalk.dim("  mode: ") + chalk.white("drift detection\n"));
     const { detectDrift } = await import("./auditors/openclaw/config-drift.js");
-    const results = detectDrift(opts.config, opts.name);
+    // Stamp ids/machineFixable so this report honours the schemaVersion:1 contract
+    // (idful results) everywhere it is advertised, not just on `audit --json`.
+    const results = stampFindingIds(detectDrift(opts.config, opts.name));
     generateReport(
       {
+        schemaVersion: 1,
         timestamp: new Date().toISOString(),
         host: "localhost",
         systems: [],

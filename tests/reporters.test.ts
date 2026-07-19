@@ -7,6 +7,7 @@ function report(results: AuditResult[]): AuditReport {
   const warn = results.filter((r) => r.status === "warn").length;
   const fail = results.filter((r) => r.status === "fail").length;
   return {
+    schemaVersion: 1,
     timestamp: "2026-06-15T00:00:00Z",
     host: "h",
     systems: [],
@@ -40,6 +41,8 @@ describe("generateReport", () => {
     generateReport(report(SAMPLE), { json: true });
     const parsed = JSON.parse(out);
     expect(parsed.summary.total).toBe(4);
+    // schemaVersion flows straight through the JSON reporter to `audit --json`.
+    expect(parsed.schemaVersion).toBe(1);
   });
 
   it("uses shape-distinct status symbols", () => {

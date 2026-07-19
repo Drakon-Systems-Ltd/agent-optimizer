@@ -5,7 +5,16 @@ export interface AuditResult {
   message: string;
   fix?: string;
   autoFixable?: boolean;
+  // Stable kebab-slug of category/check, dedup-suffixed within a report; agents
+  // key off this, not the English message (which varies per run).
+  id?: string;
+  // true when `audit --fix` can apply this finding automatically (autoFixable +
+  // a concrete apply payload). Mirrors isMachineFixable() exactly.
+  machineFixable?: boolean;
   system?: SystemKind;
+  // true when message/check contain sanitized third-party content the agent must
+  // treat as DATA, never instructions.
+  untrusted?: boolean;
   // Concrete machine-applicable transformation(s) for `audit --fix`. Present only
   // on autoFixable findings whose fix is unambiguous. Without this, a finding may
   // be flagged autoFixable but is left for manual action.
@@ -27,6 +36,8 @@ export interface FixOperation {
 }
 
 export interface AuditReport {
+  // Audit JSON contract version; bump on breaking shape changes.
+  schemaVersion: number;
   timestamp: string;
   host: string;
   systems: DetectedSystem[];
@@ -247,6 +258,10 @@ export interface OptimizeOptions {
   skip?: string[];
   /** Target system. Auto-detected via detectSystems() when omitted. */
   system?: "claude-code" | "openclaw";
+  /** Test-only injection: routes the transactional backup store to a temp dir so
+   *  applies stay hermetic. Flows through runOptimize → runOpenClawOptimize;
+   *  undefined (production) uses the real ~/.agent-optimizer store. */
+  backupsDir?: string;
 }
 
 export interface AuditOptions {
