@@ -47,6 +47,50 @@ describe("sanitizeUntrusted", () => {
   it("respects a custom max", () => {
     expect(sanitizeUntrusted("abcdef", 3)).toBe("abc…[truncated]");
   });
+
+  it("strips Trojan-Source bidi overrides/isolates", () => {
+    // U+202E RLO + U+2066 LRI reorder rendered text so display != logical order.
+    const out = sanitizeUntrusted("safe‮ evil⁦ tail");
+    expect(out).toBe("safe evil tail");
+    expect(out).not.toMatch(/[‪-‮⁦-⁩]/);
+  });
+
+  it("strips zero-width chars that split keywords for display", () => {
+    // ZWSP/ZWNJ/ZWJ/word-joiner/BOM between letters hide the real token.
+    const out = sanitizeUntrusted("e​v‌i‍l⁠x﻿y");
+    expect(out).toBe("evilxy");
+  });
+
+  it("strips OSC terminated by ST (ESC backslash), not only BEL", () => {
+    expect(sanitizeUntrusted("\x1b]0;title\x1b\\keep")).toBe("keep");
+  });
+
+  it("neutralizes 8-bit C1 introducers (0x9b CSI, 0x9d OSC)", () => {
+    // The introducer itself is a C1 control and is stripped; its body is left as
+    // inert text with no active sequence.
+    expect(sanitizeUntrusted("a\x9b31mb")).toBe("a31mb");
+    expect(sanitizeUntrusted("a\x9d0;x\x07b")).toBe("a0;xb");
+  });
+
+  it("stays bounded and control-free on a large adversarial input", () => {
+    // A long run of unterminated CSI introducers must not backtrack-blow-up and
+    // must still come out inert and clamped. (No wall-clock assertion — just prove
+    // it completes and the output is clean/bounded.)
+    const out = sanitizeUntrusted("\x1b[".repeat(200_000));
+    expect(out.length).toBeLessThanOrEqual(400 + "…[truncated]".length);
+    expect(out).not.toContain("\x1b");
+    expect(out).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
+  });
+
+  it("clamps on a code-point boundary (no orphaned surrogate before the marker)", () => {
+    // 399 ASCII + one astral char (surrogate pair) at max 400: the cut lands
+    // mid-pair, so the lone high surrogate is dropped rather than emitted.
+    const out = sanitizeUntrusted("x".repeat(399) + "😀", 400);
+    expect(out).toContain("…[truncated]");
+    const beforeMarker = out.slice(0, out.indexOf("…[truncated]"));
+    const lastCode = beforeMarker.charCodeAt(beforeMarker.length - 1);
+    expect(lastCode >= 0xd800 && lastCode <= 0xdbff).toBe(false); // no lone high surrogate
+  });
 });
 
 describe("sanitizeList", () => {

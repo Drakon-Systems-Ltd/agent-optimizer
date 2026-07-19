@@ -286,6 +286,22 @@ export async function runSecurityScan(opts: {
   extensionsDir?: string;
 }): Promise<AuditResult[]> {
   const results: AuditResult[] = [];
+
+  // Emission boundary for scanned third-party content. Every untrusted result's
+  // display strings (check, message, AND fix) pass through the sanitizer here, so
+  // no report field or raw filesystem path — including one added by a future edit
+  // — can carry a terminal escape, control char, or newline to the terminal
+  // reporter or an agent. Idempotent, so double-sanitizing already-clean
+  // collection-point values is harmless.
+  const pushUntrusted = (r: AuditResult): void => {
+    results.push({
+      ...r,
+      check: sanitizeUntrusted(r.check),
+      message: sanitizeUntrusted(r.message),
+      fix: r.fix === undefined ? undefined : sanitizeUntrusted(r.fix),
+    });
+  };
+
   const config = loadConfig(opts.config);
 
   const workspace = opts.workspace ?? (config ? findWorkspace(config) : "~/.openclaw/workspace");
@@ -354,7 +370,7 @@ export async function runSecurityScan(opts: {
         const provenance = report.source === "clawhub" ? " [ClawHub]" : report.source === "local" ? " [local]" : "";
 
         // Main score result
-        results.push({
+        pushUntrusted({
           category: `${label} Scan`,
           check: `${report.name}${provenance}`,
           untrusted: true,
@@ -369,7 +385,7 @@ export async function runSecurityScan(opts: {
 
         // Detail: risky dependencies
         if (report.riskyDeps.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: risky dependencies`,
             untrusted: true,
@@ -381,7 +397,7 @@ export async function runSecurityScan(opts: {
 
         // Detail: executable files
         if (report.executableFiles.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: executable files`,
             untrusted: true,
@@ -393,7 +409,7 @@ export async function runSecurityScan(opts: {
 
         // Detail: external URLs
         if (report.urls.length > 0) {
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: external URLs`,
             untrusted: true,
@@ -406,7 +422,7 @@ export async function runSecurityScan(opts: {
         const highHits = report.hits.filter((h) => h.severity === "high");
         if (highHits.length > 0) {
           const uniquePatterns = [...new Set(highHits.map((h) => h.pattern))];
-          results.push({
+          pushUntrusted({
             category: `${label} Scan`,
             check: `${report.name}: high-severity patterns`,
             untrusted: true,
