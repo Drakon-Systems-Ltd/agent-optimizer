@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import type { License } from "./keys.js";
+import { agentOptimizerHome } from "../utils/paths.js";
 
-const LICENSE_DIR = join(homedir(), ".agent-optimizer");
+const LICENSE_DIR = agentOptimizerHome();
 const LICENSE_FILE = join(LICENSE_DIR, "license.json");
 
 /**

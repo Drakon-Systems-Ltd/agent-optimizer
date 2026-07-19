@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, appendFileSync } from "fs";
 import { dirname } from "path";
-import { homedir } from "os";
 import { resolve } from "path";
 import type { MonitorState } from "../types.js";
+import { agentOptimizerHome } from "../utils/paths.js";
 
-export const MONITOR_DIR = resolve(homedir(), ".agent-optimizer");
+export const MONITOR_DIR = agentOptimizerHome();
 export const MONITOR_STATE_PATH = resolve(MONITOR_DIR, "monitor.json");
 export const MONITOR_LOG_PATH = resolve(MONITOR_DIR, "monitor.log");
 

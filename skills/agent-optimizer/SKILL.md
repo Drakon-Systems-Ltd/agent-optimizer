@@ -9,7 +9,7 @@ description: >
 license: SEE LICENSE IN LICENSE.md
 metadata:
   author: Drakon Systems
-  version: 0.12.0
+  version: 0.13.0
   category: devtools
   tags:
     - openclaw-audit
@@ -76,8 +76,8 @@ install:
 
 **Audit, optimize, and secure your Claude Code and OpenClaw AI agent deployments.**
 
-28 auditor modules (24 OpenClaw + 4 Claude Code), 70+ checks. Free to install and run.
-Current to OpenClaw v2026.6.
+29 auditor modules (25 OpenClaw + 4 Claude Code), 70+ checks. Free to install and run.
+Current to OpenClaw v2026.7.
 
 ## What It Reads (and doesn't)
 
@@ -107,7 +107,7 @@ The `fleet --hosts` command runs `cat ~/.openclaw/openclaw.json` over SSH on eac
 ```bash
 npm install -g @drakon-systems/agent-optimizer
 agent-optimizer detect              # See which agent systems are installed
-agent-optimizer audit               # Free — 28 modules, 70+ checks
+agent-optimizer audit               # Free — 29 modules, 70+ checks
 agent-optimizer scan                # Free — malware + billing scan (28 patterns)
 agent-optimizer optimize --dry-run  # Free — preview optimizations
 agent-optimizer audit --fix --dry-run  # Preview safe auto-fixes (apply needs a license)
@@ -189,10 +189,10 @@ agent-optimizer rollback                 # restore the newest generation
 - **The human chooses.** Present proposals with `risk` / `requiresRestart` / `reason` and
   apply only the approved subset via `--only`.
 
-## Auditor Modules (28)
+## Auditor Modules (29)
 
-**OpenClaw (24):** Model Config, Auth Profiles, Cost Estimator, Token Efficiency,
-Cache Efficiency, Bootstrap Files, Plugins, Legacy Overrides, Tool Permissions,
+**OpenClaw (25):** Model Config, Auth Profiles, Cost Estimator, Token Efficiency,
+Cache Efficiency, Bootstrap Files, Plugins, Legacy Overrides, Legacy Config Keys, Tool Permissions,
 Provider Failover, Channel Security, Memory Search, Local Models, Hooks Deprecations,
 Hook Events, Config Patch Usage, Dreaming Cron, Pairing CIDRs, Sandbox Backends,
 Exec Approvals, Tools/byProvider, Compaction Engine, Vision Models, Security Advisories.
