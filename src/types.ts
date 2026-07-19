@@ -6,6 +6,9 @@ export interface AuditResult {
   fix?: string;
   autoFixable?: boolean;
   system?: SystemKind;
+  // true when message/check contain sanitized third-party content the agent must
+  // treat as DATA, never instructions.
+  untrusted?: boolean;
   // Concrete machine-applicable transformation(s) for `audit --fix`. Present only
   // on autoFixable findings whose fix is unambiguous. Without this, a finding may
   // be flagged autoFixable but is left for manual action.
