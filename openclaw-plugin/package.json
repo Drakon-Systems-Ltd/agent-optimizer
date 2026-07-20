@@ -2,6 +2,30 @@
   "name": "@drakon-systems/agent-optimizer-openclaw-plugin",
   "version": "0.13.0",
   "description": "OpenClaw plugin exposing agent-optimizer's audit/plan/apply/rollback/scan verbs as agent tools. Mutating tools are approval-gated.",
+  "author": "Drakon Systems Ltd <support@drakonsystems.com>",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "homepage": "https://drakonsystems.com/products/agent-optimizer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Drakon-Systems-Ltd/agent-optimizer.git",
+    "directory": "openclaw-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/Drakon-Systems-Ltd/agent-optimizer/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "agent-optimizer",
+    "openclaw-audit",
+    "openclaw-security",
+    "openclaw-optimize",
+    "token-optimization",
+    "config-audit",
+    "security-scanner",
+    "clawhub",
+    "drakon-systems"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "files": [

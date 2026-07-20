@@ -4,3 +4,6 @@ dist/
 .env
 .env.*
 .DS_Store
+
+# ClawHub / OpenClaw plugin-inspector validation output
+openclaw-plugin/reports/
