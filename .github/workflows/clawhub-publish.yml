@@ -1,0 +1,64 @@
+name: Publish to ClawHub
+
+# Publishes the skill folder to ClawHub when a GitHub Release is published
+# (version taken from the release tag), or on manual dispatch. npm publishing
+# stays manual by policy — this workflow covers ClawHub only.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.4.1). Defaults to the latest tag."
+        required: false
+
+env:
+  SKILL_PATH: skills/agent-optimizer
+  SKILL_SLUG: drakon-agent-optimizer
+  SKILL_NAME: "Agent Optimizer by Drakon Systems"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install ClawHub CLI
+        run: npm i -g clawhub
+
+      - name: Publish skill
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test -n "$CLAWHUB_TOKEN" || { echo "CLAWHUB_TOKEN secret is not set"; exit 1; }
+          clawhub login --token "$CLAWHUB_TOKEN" --label "github-actions ${GITHUB_REPOSITORY}"
+
+          TAG="${RELEASE_TAG:-${INPUT_VERSION:-$(git describe --tags --abbrev=0)}}"
+          VERSION="${TAG#v}"
+          CHANGELOG="${RELEASE_BODY:-Release v${VERSION} — see CHANGELOG.md in the source repo.}"
+
+          # Keep the published SKILL.md's version metadata in step with the tag
+          # (artifact only — nothing is committed back).
+          sed -i "s/^  version: .*/  version: ${VERSION}/" "$SKILL_PATH/SKILL.md"
+
+          clawhub --no-input skill publish "$SKILL_PATH" \
+            --slug "$SKILL_SLUG" \
+            --name "$SKILL_NAME" \
+            --version "$VERSION" \
+            --changelog "$CHANGELOG" \
+            --source-repo "$GITHUB_REPOSITORY" \
+            --source-commit "$GITHUB_SHA" \
+            --source-path "$SKILL_PATH"
+
+          echo "Published $SKILL_SLUG@$VERSION to ClawHub"
