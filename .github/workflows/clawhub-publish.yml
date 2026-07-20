@@ -1,8 +1,17 @@
 name: Publish to ClawHub
 
-# Publishes the skill folder to ClawHub when a GitHub Release is published
-# (version taken from the release tag), or on manual dispatch. npm publishing
-# stays manual by policy — this workflow covers ClawHub only.
+# Publishes BOTH the skill (skills/agent-optimizer) and the OpenClaw plugin
+# (openclaw-plugin/) to ClawHub when a GitHub Release is published — version taken
+# from the release tag — or on manual dispatch. Idempotent: a version that already
+# exists on ClawHub is skipped, not failed, so re-runs and same-version releases go
+# green. npm publishing stays MANUAL by policy — this workflow covers ClawHub only.
+#
+# Trigger note: for `release` events GitHub uses the workflow file *as it exists at
+# the commit the release tag points to*. A release whose tag predates this file will
+# NOT trigger it (that is exactly why the backfilled v0.12.0/v0.13.0 releases, tagged
+# on older commits, never fired). Every release cut from a commit that includes this
+# file — i.e. everything from here on — triggers it automatically. Use the
+# `workflow_dispatch` button to run it by hand.
 
 on:
   release:
@@ -10,13 +19,24 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 1.4.1). Defaults to the latest tag."
+        description: "Version to publish (e.g. 0.14.0). Defaults to the latest tag."
         required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clawhub-publish
+  cancel-in-progress: false
 
 env:
   SKILL_PATH: skills/agent-optimizer
   SKILL_SLUG: drakon-agent-optimizer
   SKILL_NAME: "Agent Optimizer by Drakon Systems"
+  PLUGIN_PATH: openclaw-plugin
+  PLUGIN_OWNER: jarvis-drakon
+  PLUGIN_DISPLAY_NAME: "Agent Optimizer by Drakon Systems"
+  PLUGIN_TOPICS: "audit,security,optimization,cost,config"
 
 jobs:
   publish:
@@ -33,7 +53,15 @@ jobs:
       - name: Install ClawHub CLI
         run: npm i -g clawhub
 
-      - name: Publish skill
+      - name: Build plugin dist
+        # dist/index.js is gitignored, so the plugin must be built in CI before it
+        # can be published. No lockfile in openclaw-plugin/, so `npm install`.
+        run: |
+          set -euo pipefail
+          (cd "$PLUGIN_PATH" && npm install && npm run build)
+          test -f "$PLUGIN_PATH/dist/index.js" || { echo "plugin dist build failed"; exit 1; }
+
+      - name: Publish to ClawHub (skill + plugin)
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -47,18 +75,49 @@ jobs:
           TAG="${RELEASE_TAG:-${INPUT_VERSION:-$(git describe --tags --abbrev=0)}}"
           VERSION="${TAG#v}"
           CHANGELOG="${RELEASE_BODY:-Release v${VERSION} — see CHANGELOG.md in the source repo.}"
+          echo "Publishing ClawHub artifacts at version ${VERSION}"
 
-          # Keep the published SKILL.md's version metadata in step with the tag
-          # (artifact only — nothing is committed back).
+          # Publish idempotently: an "already exists" for this version is a no-op
+          # (green), any other failure is fatal.
+          publish_or_skip() {
+            local kind="$1"; shift
+            local out
+            if out=$("$@" 2>&1); then
+              echo "$out"
+              echo "==> ${kind} ${VERSION} published."
+            else
+              echo "$out"
+              if echo "$out" | grep -qi "already exists"; then
+                echo "==> ${kind} ${VERSION} already on ClawHub — skipping (idempotent)."
+              else
+                echo "==> ${kind} publish failed."
+                return 1
+              fi
+            fi
+          }
+
+          # --- Skill --- (keep SKILL.md's version metadata in step with the tag;
+          # artifact only, nothing is committed back)
           sed -i "s/^  version: .*/  version: ${VERSION}/" "$SKILL_PATH/SKILL.md"
+          publish_or_skip "skill" \
+            clawhub --no-input skill publish "$SKILL_PATH" \
+              --slug "$SKILL_SLUG" \
+              --name "$SKILL_NAME" \
+              --version "$VERSION" \
+              --changelog "$CHANGELOG" \
+              --source-repo "$GITHUB_REPOSITORY" \
+              --source-commit "$GITHUB_SHA" \
+              --source-path "$SKILL_PATH"
 
-          clawhub --no-input skill publish "$SKILL_PATH" \
-            --slug "$SKILL_SLUG" \
-            --name "$SKILL_NAME" \
-            --version "$VERSION" \
-            --changelog "$CHANGELOG" \
-            --source-repo "$GITHUB_REPOSITORY" \
-            --source-commit "$GITHUB_SHA" \
-            --source-path "$SKILL_PATH"
+          # --- Plugin --- (keep the package.json + manifest versions in step with
+          # the tag; artifact only)
+          VERSION="$VERSION" node -e "for (const f of ['package.json','openclaw.plugin.json']) { const p = process.env.PLUGIN_PATH + '/' + f; const j = require('./' + p); j.version = process.env.VERSION; require('fs').writeFileSync(p, JSON.stringify(j, null, 2) + '\n'); }"
+          publish_or_skip "plugin" \
+            clawhub --no-input package publish "$PLUGIN_PATH" \
+              --owner "$PLUGIN_OWNER" \
+              --display-name "$PLUGIN_DISPLAY_NAME" \
+              --version "$VERSION" \
+              --changelog "$CHANGELOG" \
+              --topics "$PLUGIN_TOPICS"
 
-          echo "Published $SKILL_SLUG@$VERSION to ClawHub"
+          echo "ClawHub publish complete for ${VERSION}."
