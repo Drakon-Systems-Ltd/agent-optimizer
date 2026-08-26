@@ -5,6 +5,8 @@ import { loadConfig, findAgentDir, detectOpenClawVersion } from "../utils/config
 import { detectSystems } from "../detect/index.js";
 import { runOpenClawAuditors } from "./openclaw/index.js";
 import { runClaudeCodeAuditors } from "./claude-code/index.js";
+import { runHermesAuditors } from "./hermes/index.js";
+import { dirname } from "path";
 import { stampFindingIds } from "../utils/finding-id.js";
 
 export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): Promise<AuditReport> {
@@ -68,6 +70,13 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
   const ccSystems = systems.filter((s) => s.kind === "claude-code");
   if (ccSystems.length > 0) {
     results.push(...runClaudeCodeAuditors(ccSystems));
+  }
+
+  // Hermes Agent — READ-ONLY audit (no optimize/fix paths). The auditor family
+  // reads config.yaml + auth.json from the detected Hermes home dir.
+  const hermesSystem = systems.find((s) => s.kind === "hermes");
+  if (hermesSystem) {
+    results.push(...runHermesAuditors(dirname(hermesSystem.configPath)));
   }
 
   // Stamp stable ids + machineFixable onto every result before it leaves here, so

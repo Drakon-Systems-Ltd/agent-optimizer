@@ -18,6 +18,19 @@ function detectClaudeCodeVersion(): string | null {
   }
 }
 
+function detectHermesVersion(): string | null {
+  try {
+    const out = execSync("hermes --version 2>/dev/null", {
+      timeout: 3000,
+      encoding: "utf-8",
+    }).toString().trim();
+    const m = out.match(/(\d+\.\d+\.\d+(?:-[\w.]+)?)/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function detectSystems(cwd: string = process.cwd()): DetectedSystem[] {
   const systems: DetectedSystem[] = [];
 
@@ -51,6 +64,17 @@ export function detectSystems(cwd: string = process.cwd()): DetectedSystem[] {
       kind: "openclaw",
       version: detectOpenClawVersion(),
       configPath: ocUser,
+      scope: "user",
+    });
+  }
+
+  // Hermes Agent — user scope (read-only support: audit, no optimize/fix)
+  const hermesUser = resolve(homedir(), ".hermes", "config.yaml");
+  if (existsSync(hermesUser)) {
+    systems.push({
+      kind: "hermes",
+      version: detectHermesVersion(),
+      configPath: hermesUser,
       scope: "user",
     });
   }

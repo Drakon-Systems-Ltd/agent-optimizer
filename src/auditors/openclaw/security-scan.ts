@@ -284,6 +284,7 @@ export async function runSecurityScan(opts: {
   workspace?: string;
   hooksDir?: string;
   extensionsDir?: string;
+  hermesSkillsDir?: string;
 }): Promise<AuditResult[]> {
   const results: AuditResult[] = [];
 
@@ -314,6 +315,14 @@ export async function runSecurityScan(opts: {
     { path: hooksDir, label: "Hooks", perItem: true },
     { path: extensionsDir, label: "Extensions", perItem: true },
   ];
+
+  // Hermes Agent skills (~/.hermes/skills) — scanned like OpenClaw workspace
+  // skills, but only when the directory exists so non-Hermes hosts don't get a
+  // "directory not found" note for a system they don't run.
+  const hermesSkillsDir = expandPath(opts.hermesSkillsDir ?? "~/.hermes/skills");
+  if (existsSync(hermesSkillsDir)) {
+    scanTargets.push({ path: hermesSkillsDir, label: "Hermes Skills", perItem: true });
+  }
 
   let totalSkills = 0;
   let cleanCount = 0;
