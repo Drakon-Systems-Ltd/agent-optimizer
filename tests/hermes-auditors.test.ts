@@ -178,23 +178,44 @@ describe("auditHermesMemory", () => {
 });
 
 describe("auditHermesChannelSecurity", () => {
-  it("warns when a configured channel has no allowed_chats", () => {
+  it("warns when telegram has no allowed_chats and no mention gate", () => {
     const results = auditHermesChannelSecurity(fromYaml(`telegram:\n  bot_token: abc\n`));
-    const r = results.find((x) => x.check === "telegram: allowed chats");
+    const r = results.find((x) => x.check === "telegram: allowed_chats");
     expect(r!.status).toBe("warn");
     expect(r!.message).toContain("any telegram chat");
   });
 
-  it("warns when allowed_chats is an empty list", () => {
-    const results = auditHermesChannelSecurity(fromYaml(`slack:\n  allowed_chats: []\n`));
-    expect(results.some((r) => r.status === "warn" && r.check === "slack: allowed chats")).toBe(true);
+  it("uses the per-channel allowlist key: slack allowed_channels, matrix allowed_rooms", () => {
+    const results = auditHermesChannelSecurity(
+      fromYaml(`slack:\n  allowed_channels: ''\nmatrix:\n  allowed_rooms: ''\n`)
+    );
+    expect(results.some((r) => r.check === "slack: allowed_channels")).toBe(true);
+    expect(results.some((r) => r.check === "matrix: allowed_rooms")).toBe(true);
   });
 
-  it("passes when allowed_chats is non-empty", () => {
+  it("downgrades an empty allowlist to info when require_mention gates the channel", () => {
+    const results = auditHermesChannelSecurity(
+      fromYaml(`slack:\n  require_mention: true\n  allowed_channels: ''\n`)
+    );
+    const r = results.find((x) => x.check === "slack: allowed_channels");
+    expect(r!.status).toBe("info");
+    expect(r!.message).toContain("@mention");
+  });
+
+  it("passes when the allowlist is a non-empty list", () => {
     const results = auditHermesChannelSecurity(
       fromYaml(`telegram:\n  allowed_chats:\n    - 12345\n    - 67890\n`)
     );
-    const r = results.find((x) => x.check === "telegram: allowed chats");
+    const r = results.find((x) => x.check === "telegram: allowed_chats");
+    expect(r!.status).toBe("pass");
+    expect(r!.message).toContain("2 allowed chats");
+  });
+
+  it("passes and counts a comma-separated string allowlist", () => {
+    const results = auditHermesChannelSecurity(
+      fromYaml(`telegram:\n  allowed_chats: '111, 222'\n`)
+    );
+    const r = results.find((x) => x.check === "telegram: allowed_chats");
     expect(r!.status).toBe("pass");
     expect(r!.message).toContain("2 allowed chats");
   });
@@ -202,7 +223,7 @@ describe("auditHermesChannelSecurity", () => {
   it("only audits channels whose key exists", () => {
     const results = auditHermesChannelSecurity(fromYaml(`telegram:\n  allowed_chats: [1]\n`));
     expect(results).toHaveLength(1);
-    expect(results[0].check).toBe("telegram: allowed chats");
+    expect(results[0].check).toBe("telegram: allowed_chats");
   });
 
   it("audits each of telegram/slack/discord/mattermost/matrix when present", () => {

@@ -19,13 +19,17 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
 
   // Resolve OpenClaw config. If detection found OpenClaw, use it as preferred.
   // Otherwise fall back to opts.config (user passed --config to a non-standard path).
+  // If the OpenClaw config is missing but another agent system (Claude Code,
+  // Hermes) was detected, continue without the OpenClaw auditors instead of
+  // dying — a Hermes-only box is a first-class audit target.
   const config = loadConfig(opts.config);
-  if (!config) {
+  if (!config && !detected.some((s) => s.kind !== "openclaw")) {
     console.error(`Config not found: ${opts.config}`);
     process.exit(1);
   }
 
-  const agentDir = opts.agentDir ?? findAgentDir(config);
+  const agentDir =
+    opts.agentDir ?? (config ? findAgentDir(config) : "~/.openclaw/agents/main/agent");
 
   // Determine version: prefer detected OpenClaw version, fall back to live CLI detection
   let openclawVersion: string = "unknown";
@@ -43,22 +47,23 @@ export async function runFullAudit(opts: AuditOptions & { silent?: boolean }): P
 
   // Ensure systems list always contains an entry for the OpenClaw config we audited,
   // even if detection didn't find ~/.openclaw/openclaw.json (e.g. user passed --config to a non-standard path)
-  const systems: DetectedSystem[] = openclawSystem
-    ? [...detected]
-    : [
-        ...detected,
-        {
-          kind: "openclaw",
-          version: openclawVersion === "unknown" ? null : openclawVersion,
-          configPath: opts.config,
-          scope: "user",
-        },
-      ];
+  const systems: DetectedSystem[] =
+    openclawSystem || !config
+      ? [...detected]
+      : [
+          ...detected,
+          {
+            kind: "openclaw",
+            version: openclawVersion === "unknown" ? null : openclawVersion,
+            configPath: opts.config,
+            scope: "user",
+          },
+        ];
 
   // Dispatch per system. Today only OpenClaw has auditors; v0.11.0 adds Claude Code + Cursor.
   const results: AuditResult[] = [];
   for (const system of systems) {
-    if (system.kind === "openclaw") {
+    if (system.kind === "openclaw" && config) {
       results.push(
         ...runOpenClawAuditors({ config, agentDir, openclawVersion, showProgress })
       );

@@ -5,6 +5,47 @@ All notable changes to Agent Optimizer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0]
+
+The **Hermes + honest-report** release: read-only Hermes Agent support, and a
+report that gives every user the full picture for free.
+
+### Added
+
+- **Hermes Agent support (read-only).** Detects `~/.hermes/config.yaml` and runs
+  a dedicated auditor family: model/fallback chain, approvals + command
+  allowlist, prompt caching, compression, memory write-approval, per-channel
+  allowlists (correct per-channel keys: `allowed_chats` / `allowed_channels` /
+  `allowed_rooms`, with `require_mention` treated as a gate), PII redaction,
+  inline-shell + agent-created-skill guards, and auth token expiry from
+  `auth.json`. Headline check: the known `hermes config set` defect where a
+  list-valued key is silently stored as one quoted string (and `hermes config
+  check` still reports healthy) is caught and FAILed with the exact repair
+  command. `~/.hermes/skills` is included in `scan`. No writes — `optimize`
+  and `--fix` stay OpenClaw/Claude Code-only for now.
+- **Hermes-only boxes audit cleanly.** A missing OpenClaw config no longer
+  aborts the audit when another agent system was detected.
+- `audit -v/--verbose` to show all informational notes.
+
+### Changed
+
+- **All fix advice is now free.** The licensed feature is `--fix` *applying*
+  fixes, not seeing them. The upsell now reports how many findings are
+  auto-fixable instead of hiding instructions.
+- **Deduplicated human report.** Identical (status, message) rows across
+  auditors are shown once with an "also flagged by N other checks" note.
+  `--json` output is unchanged.
+- **Collapsed info notes.** Cost Estimate notes stay visible; the rest fold
+  into a count unless `--verbose`. 
+- **Honest health score.** Info rows no longer count as passes — score is
+  computed over pass/warn/fail only (a box with dead primary auth dropped
+  from 89 to 82).
+- **Multi-agent branding.** Description, help, and npm keywords now cover
+  Claude Code, OpenClaw, and Hermes.
+- **Zero-arg default.** Bare `agent-optimizer` (or
+  `npx @drakon-systems/agent-optimizer`) runs the audit instead of printing
+  help.
+
 ## [0.13.0]
 
 The **agent loop** release: Agent Optimizer becomes safely drivable by an LLM host
