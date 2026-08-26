@@ -299,7 +299,7 @@ export interface MonitorPingPayload {
   }>;
 }
 
-export type SystemKind = "claude-code" | "openclaw" | "cursor";
+export type SystemKind = "claude-code" | "openclaw" | "cursor" | "hermes";
 
 export interface DetectedSystem {
   kind: SystemKind;

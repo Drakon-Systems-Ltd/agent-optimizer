@@ -409,7 +409,7 @@ program
 
 program
   .command("detect")
-  .description("List detected Claude-family agent systems (Claude Code, OpenClaw, Cursor)")
+  .description("List detected Claude-family agent systems (Claude Code, OpenClaw, Cursor, Hermes)")
   .option("--json", "Output as JSON")
   .action(async (opts) => {
     const { detectSystems } = await import("./detect/index.js");
