@@ -1,7 +1,7 @@
 {
   "name": "@drakon-systems/agent-optimizer",
   "version": "0.13.0",
-  "description": "Audit, optimize, and secure OpenClaw AI agent deployments. Token waste detection, security scanning, config drift, fleet SSH audit. Free to install.",
+  "description": "Audit, optimize, and secure Claude Code, OpenClaw, and Hermes AI agent deployments. Token waste detection, security scanning, config drift, fleet SSH audit. Free to install.",
   "type": "module",
   "bin": {
     "agent-optimizer": "dist/cli.js"
@@ -40,7 +40,12 @@
     "malware-detection",
     "cost-optimization",
     "clawhub",
-    "drakon-systems"
+    "drakon-systems",
+    "claude-code",
+    "claude-code-audit",
+    "hermes-agent",
+    "hermes-audit",
+    "agent-audit"
   ],
   "author": "Drakon Systems Ltd <support@drakonsystems.com>",
   "license": "SEE LICENSE IN LICENSE.md",

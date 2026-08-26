@@ -25,16 +25,15 @@ const STATUS_SYMBOL: Record<string, string> = {
   info: blue("i"),
 };
 
-// How many fix instructions to show for free
-const FREE_FIX_LIMIT = 3;
 
 // ── Health score ────────────────────────────────────────────────────
-function calculateHealthScore(report: AuditReport): number {
-  const { pass, warn, fail, total } = report.summary;
-  if (total === 0) return 100;
-  const info = total - pass - warn - fail;
-  const score = ((pass + info) * 1.0 + warn * 0.4 + fail * 0) / total;
-  return Math.round(score * 100);
+export function calculateHealthScore(report: AuditReport): number {
+  // info rows are neutral notes — scoring them as passes inflated the number
+  // (an agent with dead primary auth scored 89/100).
+  const { pass, warn, fail } = report.summary;
+  const scored = pass + warn + fail;
+  if (scored === 0) return 100;
+  return Math.round(((pass + warn * 0.4) / scored) * 100);
 }
 
 function renderHealthBar(score: number, width: number = 20): string {
@@ -72,10 +71,33 @@ function extractMonthlySavings(report: AuditReport): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
+// ── Display dedup ───────────────────────────────────────────────────
+// Different auditors legitimately re-derive the same fact (an expired token
+// surfaces in Auth AND per-rung in Provider Failover). The JSON output keeps
+// every row; the human report shows each distinct message once.
+type DisplayResult = AuditResult & { dupCount?: number };
+
+export function dedupeForDisplay(results: AuditResult[]): DisplayResult[] {
+  const seen = new Map<string, DisplayResult>();
+  const out: DisplayResult[] = [];
+  for (const r of results) {
+    const key = `${r.status}|${r.message}`;
+    const prev = seen.get(key);
+    if (prev) {
+      prev.dupCount = (prev.dupCount ?? 0) + 1;
+      continue;
+    }
+    const copy: DisplayResult = { ...r };
+    seen.set(key, copy);
+    out.push(copy);
+  }
+  return out;
+}
+
 // ── Main report ─────────────────────────────────────────────────────
 export function generateReport(
   report: AuditReport,
-  opts: { json?: boolean; licensed?: boolean }
+  opts: { json?: boolean; licensed?: boolean; verbose?: boolean }
 ): void {
   if (opts.json) {
     console.log(JSON.stringify(report, null, 2));
@@ -86,30 +108,28 @@ export function generateReport(
   const width = termWidth();
   const rule = "─".repeat(Math.min(48, width - 2));
 
-  const fails = report.results.filter((r) => r.status === "fail");
-  const warns = report.results.filter((r) => r.status === "warn");
-  const infos = report.results.filter((r) => r.status === "info");
-  const passes = report.results.filter((r) => r.status === "pass");
+  const deduped = dedupeForDisplay(report.results);
+  const fails = deduped.filter((r) => r.status === "fail");
+  const warns = deduped.filter((r) => r.status === "warn");
+  const infos = deduped.filter((r) => r.status === "info");
+  const passes = deduped.filter((r) => r.status === "pass");
 
-  // Fix-gating state (free users see the first N fix instructions).
-  let fixesShown = 0;
-  let fixesGated = 0;
-
-  // Render one fail/warn finding: header line, wrapped message, gated fix.
-  const renderFinding = (r: AuditResult, colour: (s: string) => string): void => {
+  // Render one fail/warn finding: header line, wrapped message, fix advice.
+  // Advice is always shown — the licensed feature is --fix APPLYING it.
+  const renderFinding = (r: DisplayResult, colour: (s: string) => string): void => {
     const sym = STATUS_SYMBOL[r.status] ?? "?";
     console.log(`  ${sym} ${white(r.category)} ${dim("·")} ${dim(r.check)}`);
     for (const line of wrap(r.message, width - 4)) console.log("    " + colour(line));
     if (r.fix && (r.status === "fail" || r.status === "warn")) {
-      if (licensed || fixesShown < FREE_FIX_LIMIT) {
-        const fixLines = wrap(r.fix, width - 6);
-        console.log("    " + red("→ " + fixLines[0]));
-        for (const line of fixLines.slice(1)) console.log("      " + red(line));
-        fixesShown++;
-      } else {
-        console.log("    " + dim("→ fix hidden — unlock with a license"));
-        fixesGated++;
+      const fixLines = wrap(r.fix, width - 6);
+      const autoTag = r.machineFixable ? dim("  (auto-fixable)") : "";
+      console.log("    " + red("→ " + fixLines[0]) + (fixLines.length === 1 ? autoTag : ""));
+      for (let i = 1; i < fixLines.length; i++) {
+        console.log("      " + red(fixLines[i]) + (i === fixLines.length - 1 ? autoTag : ""));
       }
+    }
+    if (r.dupCount) {
+      console.log("    " + dim(`also flagged by ${r.dupCount} other check${r.dupCount > 1 ? "s" : ""}`));
     }
   };
 
@@ -135,12 +155,24 @@ export function generateReport(
   }
 
   // ── Notes (info) — compact, one wrapped entry each ───────────────
+  // Default view keeps Cost Estimate notes (the numbers people care about)
+  // and collapses the rest to a count; --verbose shows everything.
   if (infos.length > 0) {
-    console.log(`\n  ${blue("NOTES")} ${dim(rule.slice(6))}`);
-    for (const r of infos) {
-      const lines = wrap(`${r.category} · ${r.message}`, width - 4);
-      console.log(`  ${blue("i")} ${dim(lines[0])}`);
-      for (const line of lines.slice(1)) console.log("    " + dim(line));
+    const shown = opts.verbose
+      ? infos
+      : infos.filter((r) => r.category === "Cost Estimate");
+    const hidden = infos.length - shown.length;
+    if (shown.length > 0) {
+      console.log(`\n  ${blue("NOTES")} ${dim(rule.slice(6))}`);
+      for (const r of shown) {
+        const lines = wrap(`${r.category} · ${r.message}`, width - 4);
+        console.log(`  ${blue("i")} ${dim(lines[0])}`);
+        for (const line of lines.slice(1)) console.log("    " + dim(line));
+        if (r.dupCount) console.log("    " + dim(`also flagged by ${r.dupCount} other check${r.dupCount > 1 ? "s" : ""}`));
+      }
+    }
+    if (hidden > 0) {
+      console.log(`\n  ${blue("i")} ${dim(`${hidden} informational note${hidden > 1 ? "s" : ""} hidden — rerun with --verbose to see them`)}`);
     }
   }
 
@@ -170,7 +202,12 @@ export function generateReport(
   }
 
   // ── ROI upsell for unlicensed users ──────────────────────────────
-  if (!licensed && fixesGated > 0) {
+  // Every fix instruction above is free; the licensed feature is --fix
+  // applying the machine-fixable ones for you.
+  const autoFixable = deduped.filter(
+    (r) => (r.status === "fail" || r.status === "warn") && r.machineFixable
+  ).length;
+  if (!licensed && autoFixable > 0) {
     const monthly = extractMonthlySavings(report);
     const annual = monthly ? monthly * 12 : null;
 
@@ -183,8 +220,8 @@ export function generateReport(
       console.log(dim("  │ ") + white(`£29 license pays for itself in ${payback} day${payback > 1 ? "s" : ""}`) + dim("        │"));
     }
 
-    console.log(dim("  │ ") + yellow(`${fixesGated} fix instruction${fixesGated > 1 ? "s" : ""} hidden`) + dim(" — unlock with a license") + dim("   │"));
-    console.log(dim("  │                                             │"));
+    console.log(dim("  │ ") + yellow(`${autoFixable} finding${autoFixable > 1 ? "s" : ""} auto-fixable`) + dim(" — `audit --fix` applies") + dim("  │"));
+    console.log(dim("  │ ") + dim("them for you (licensed)") + dim("                     │"));
     console.log(dim("  │ ") + red("→ ") + white("agent-optimizer buy") + dim("        open purchase page │"));
     console.log(dim("  │ ") + red("→ ") + white("agent-optimizer activate <key>") + dim(" activate      │"));
     console.log(dim("  └─────────────────────────────────────────────┘"));

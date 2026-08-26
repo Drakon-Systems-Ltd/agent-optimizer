@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { generateReport, printScanResults } from "../src/reporters/index.js";
+import { generateReport, printScanResults, dedupeForDisplay, calculateHealthScore } from "../src/reporters/index.js";
 import type { AuditReport, AuditResult } from "../src/types.js";
 
 function report(results: AuditResult[]): AuditReport {
@@ -80,14 +80,81 @@ describe("generateReport", () => {
     expect(out).toContain("SOUL.md size");
   });
 
-  it("gates fix text past the free limit for unlicensed users", () => {
+  it("shows ALL fix advice to unlicensed users — the licensed feature is --fix applying it", () => {
     const many: AuditResult[] = Array.from({ length: 6 }, (_, i) => ({
-      category: "C", check: `check${i}`, status: "fail", message: "m", fix: `fix-${i}`,
+      category: "C", check: `check${i}`, status: "fail", message: `msg-${i}`, fix: `fix-${i}`,
     }));
     generateReport(report(many), { licensed: false });
-    expect(out).toContain("fix-0");
-    expect(out).toContain("fix-2");
-    expect(out).toContain("fix hidden"); // beyond the free limit
+    for (let i = 0; i < 6; i++) expect(out).toContain(`fix-${i}`);
+    expect(out).not.toContain("fix hidden");
+  });
+
+  it("dedupes repeated messages across auditors and notes the repeat count", () => {
+    const dupes: AuditResult[] = [
+      { category: "Auth", check: "token expiry", status: "fail", message: "OAuth token expired 5h ago" },
+      { category: "Provider Failover", check: "rung 1", status: "fail", message: "OAuth token expired 5h ago" },
+      { category: "Provider Failover", check: "rung 2", status: "fail", message: "OAuth token expired 5h ago" },
+    ];
+    generateReport(report(dupes), { licensed: true });
+    expect(out.split("OAuth token expired 5h ago").length - 1).toBe(1);
+    expect(out).toContain("also flagged by 2 other checks");
+  });
+
+  it("collapses info notes behind --verbose but keeps Cost Estimate visible", () => {
+    const noisy: AuditResult[] = [
+      { category: "Cost Estimate", check: "monthly", status: "info", message: "~£94/month estimated" },
+      { category: "Plugins", check: "p1", status: "info", message: "plugin note one" },
+      { category: "Plugins", check: "p2", status: "info", message: "plugin note two" },
+    ];
+    generateReport(report(noisy), { licensed: true });
+    expect(out).toContain("~£94/month estimated");
+    expect(out).not.toContain("plugin note one");
+    expect(out).toContain("2 informational notes hidden");
+
+    out = "";
+    generateReport(report(noisy), { licensed: true, verbose: true });
+    expect(out).toContain("plugin note one");
+    expect(out).toContain("plugin note two");
+    expect(out).not.toContain("informational notes hidden");
+  });
+});
+
+describe("dedupeForDisplay", () => {
+  it("keeps distinct messages and counts duplicates on the first occurrence", () => {
+    const rows: AuditResult[] = [
+      { category: "A", check: "c1", status: "warn", message: "same" },
+      { category: "B", check: "c2", status: "warn", message: "same" },
+      { category: "C", check: "c3", status: "warn", message: "different" },
+      { category: "D", check: "c4", status: "info", message: "same" }, // different status — not a dupe
+    ];
+    const d = dedupeForDisplay(rows);
+    expect(d).toHaveLength(3);
+    expect(d[0].dupCount).toBe(1);
+    expect(d[1].message).toBe("different");
+    expect(d[2].status).toBe("info");
+  });
+});
+
+describe("calculateHealthScore", () => {
+  it("ignores info rows instead of scoring them as passes", () => {
+    // 1 pass, 1 fail, 20 info: old formula scored this 95/100. Now: 50.
+    const rows: AuditResult[] = [
+      { category: "A", check: "ok", status: "pass", message: "fine" },
+      { category: "A", check: "bad", status: "fail", message: "broken" },
+      ...Array.from({ length: 20 }, (_, i) => ({
+        category: "N", check: `n${i}`, status: "info" as const, message: `note ${i}`,
+      })),
+    ];
+    expect(calculateHealthScore(report(rows))).toBe(50);
+  });
+
+  it("scores warns at 0.4 and an all-pass report at 100", () => {
+    const rows: AuditResult[] = [
+      { category: "A", check: "ok", status: "pass", message: "fine" },
+      { category: "A", check: "meh", status: "warn", message: "iffy" },
+    ];
+    expect(calculateHealthScore(report(rows))).toBe(70);
+    expect(calculateHealthScore(report([rows[0]]))).toBe(100);
   });
 });
 

@@ -36,7 +36,7 @@ const program = new Command();
 program
   .name("agent-optimizer")
   .description(
-    "OpenClaw Agent Optimizer by Drakon Systems — audit, optimize, and secure your OpenClaw deployment"
+    "Agent Optimizer by Drakon Systems — audit, optimize, and secure Claude Code, OpenClaw, and Hermes agent deployments"
   )
   .version(version)
   .addHelpText("before", () => {
@@ -50,7 +50,7 @@ program
       d("  ─────────────────────────────"),
       "",
       d("  FREE"),
-      `    ${w("audit")}  ${d("[-c config] [--json] [--deep]")}     ${d("Full 70+ check audit")}`,
+      `    ${w("audit")}  ${d("[--json] [--deep] [--verbose]")}    ${d("Full audit + fix advice")}`,
       `    ${w("scan")}   ${d("[-c config] [--workspace path]")}    ${d("Malware + billing scan")}`,
       `    ${w("optimize --dry-run")} ${d("[--profile name]")}      ${d("Preview optimizations")}`,
       `    ${w("drift")}  ${d("[--name snapshot]")}                 ${d("Config drift detection")}`,
@@ -431,7 +431,7 @@ program
 
 program
   .command("audit")
-  .description("Run a full audit of your OpenClaw installation (free)")
+  .description("Run a full audit of your agent installations — Claude Code, OpenClaw, Hermes (free)")
   .option(
     "-c, --config <path>",
     "Path to openclaw.json",
@@ -442,6 +442,7 @@ program
   .option("--fix", "Apply safe fixes automatically (requires license)")
   .option("--dry-run", "With --fix: preview the fixes without writing any files")
   .option("--deep", "Include live gateway probes")
+  .option("-v, --verbose", "Show all informational notes (hidden by default)")
   .action(async (opts) => {
     const licensed = !!hasValidLicense();
 
@@ -866,5 +867,9 @@ program
     const { runFleetAudit } = await import("./auditors/openclaw/fleet.js");
     await runFleetAudit(opts);
   });
+
+// Bare `agent-optimizer` (or `npx @drakon-systems/agent-optimizer`) runs the
+// audit — the shareable one-liner. `--help` still works explicitly.
+if (process.argv.length <= 2) process.argv.push("audit");
 
 program.parse();
