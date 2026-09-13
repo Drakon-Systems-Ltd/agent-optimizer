@@ -315,11 +315,226 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "MCP OAuth and MS Teams Graph/Bot Framework responses not size-bounded — oversized responses can exhaust memory",
     fix: "Upgrade to OpenClaw v2026.7.1+",
   },
+  // v2026.7.1 fixes — GitHub Security Advisories published 2026-09-11
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "MCP config owner auth (GHSA-wwx7-573h-pqwc)",
+    message: "GHSA-wwx7-573h-pqwc: /mcp set and /mcp unset from an authorized non-owner channel sender persist Gateway MCP server configuration — a sender-chosen stdio MCP process then starts under the OpenClaw user (CVSS 8.8)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, disable MCP chat commands in external channels and review mcp.servers for unexpected entries",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "Codex computer-use install owner auth (GHSA-pjjr-5qhr-5w6r)",
+    message: "GHSA-pjjr-5qhr-5w6r: an authorized non-owner channel sender could trigger the Codex computer-use plugin installation and start its MCP process on the host (CVSS 8.8)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, disable Codex computer-use installation in message channels",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "Claude permission replies owner auth (GHSA-p5g8-m35v-7m82)",
+    message: "GHSA-p5g8-m35v-7m82: a non-owner channel sender could approve or deny a pending Claude Code permission request through the MCP channel bridge (CVSS 8.0)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, avoid delivering Claude permission prompts to shared channels",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "Browser proxy admin scope (GHSA-jghr-xp78-995p)",
+    message: "GHSA-jghr-xp78-995p: a write-scoped caller in an identity-bearing Gateway deployment could reach browser control via node.invoke, bypassing the admin scope required for browser.request (CVSS 8.3)",
+    fix: "Upgrade to OpenClaw v2026.7.1+",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "chat.send owner-only tools (GHSA-qw7m-h363-33qw)",
+    message: "GHSA-qw7m-h363-33qw: a write-scoped non-owner caller could start a chat turn whose tool inventory included the owner-only gateway and cron tools (CVSS 7.6)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, restrict chat.send to administrators",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "fail",
+    check: "Signal reaction approval binding (GHSA-r88x-r7jj-f2cf)",
+    message: "GHSA-r88x-r7jj-f2cf: a Signal approval reaction could attach to ordinary outbound text instead of the pending approval request, so a reaction to unrelated text may resolve a host action (CVSS 7.1)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, avoid reaction-based approvals in Signal",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "warn",
+    check: "Windows allowlist workspace shadowing (GHSA-rgjw-6v73-php6)",
+    message: "GHSA-rgjw-6v73-php6: on Windows allowlist mode, PowerShell command analysis approves a binary from PATH but can run a same-named binary from the workspace directory (CVSS 6.7)",
+    fix: "Upgrade to OpenClaw v2026.7.1+",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "warn",
+    check: "Active Memory global toggle owner check (GHSA-xw9g-7xvv-gcjc)",
+    message: "GHSA-xw9g-7xvv-gcjc: an authorized non-owner external-channel sender could enable or disable Active Memory globally for the Gateway (CVSS 6.3)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, disable global Active Memory commands in external channels",
+  },
+  {
+    fixedIn: "2026.7.1",
+    severity: "warn",
+    check: "Group activation owner auth (GHSA-q9j5-4xr6-xqqw)",
+    message: "GHSA-q9j5-4xr6-xqqw: an authorized non-owner channel sender could change whether a group requires mention-based activation via /activation (CVSS 5.4)",
+    fix: "Upgrade to OpenClaw v2026.7.1+. Until then, disable activation-setting commands in shared channels",
+  },
+  // v2026.8.1 fixes
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Codex native tools per-chat policy (GHSA-wwcw-jfpp-gpxw)",
+    message: "GHSA-wwcw-jfpp-gpxw: a conversation-level tools.allow rule filtered OpenClaw tools but not the shell, process, file and patch tools owned by the Codex app-server runtime (CVSS 8.8)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Inbound voice calls owner authority (GHSA-rrxp-5mx8-mvhh)",
+    message: "GHSA-rrxp-5mx8-mvhh: classic inbound voice calls launched the agent without the caller's identity or non-owner status, so owner-only tool filtering failed open for admitted remote callers (CVSS 8.8)",
+    fix: "Upgrade @openclaw/voice-call (OpenClaw v2026.8.1+). Until then, disable classic inbound calling or route it to a read-only agent",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Agent cron tool operator command jobs (GHSA-hpg5-cq3m-phqp)",
+    message: "GHSA-hpg5-cq3m-phqp: a model-visible agent caller could read the stored environment of, and trigger, ownerless operator command cron jobs routed to the same agent (CVSS 8.3)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Matrix case-distinct user ID conflation (GHSA-hgv5-f2r3-6v9r)",
+    message: "GHSA-hgv5-f2r3-6v9r: Matrix authorization lowercased complete user IDs, so distinct accounts could normalize to the same allowlist/owner/approver identity (CVSS 7.5)",
+    fix: "Upgrade @openclaw/matrix (OpenClaw v2026.8.1+) and review allowlists for IDs differing only by case",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Browser CDP DNS pinning (GHSA-p3h6-v2h4-36q2)",
+    message: "GHSA-p3h6-v2h4-36q2: remote CDP hostnames were validated once but the WebSocket/Playwright transports re-resolved DNS independently, so the Gateway could connect to a policy-denied address (CVSS 8.2)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "fail",
+    check: "Config revision hash verifier (GHSA-qgj5-6x35-9g6f)",
+    message: "GHSA-qgj5-6x35-9g6f: redacted config responses included deterministic hashes over the unredacted config, which act as an offline verifier for a low-entropy Gateway passphrase (CVSS 7.5)",
+    fix: "Upgrade to OpenClaw v2026.8.1+ and use a high-entropy gateway token or passphrase",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Outbound attachment read denials (GHSA-w5x7-c87m-3jpc)",
+    message: "GHSA-w5x7-c87m-3jpc: outbound attachment handling read local paths without the originating sender's toolsBySender policy, so a sender denied filesystem reads could still receive a known host file (CVSS 6.5)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Slack file download authorization (GHSA-v7hh-7676-rg67)",
+    message: "GHSA-v7hh-7676-rg67: Slack download-file authorization failed open when a file lacked share metadata, allowing retrieval outside the caller's conversation scope (CVSS 6.5)",
+    fix: "Upgrade @openclaw/slack (OpenClaw v2026.8.1+)",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "WhatsApp session reset command auth (GHSA-mm7m-wcgh-8mfq)",
+    message: "GHSA-mm7m-wcgh-8mfq: a command-denied WhatsApp group sender could use /new <model> to reset the shared group session and persist a provider/model override (CVSS 6.3)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Azure Speech workspace endpoint override (GHSA-pfrw-r5vr-89hw)",
+    message: "GHSA-pfrw-r5vr-89hw: the workspace dotenv filter did not block the _ENDPOINT suffix, so untrusted workspace content could redirect Azure Speech requests (and their auth header) to a chosen endpoint (CVSS 5.5)",
+    fix: "Upgrade to OpenClaw v2026.8.1+. If you ran OpenClaw in untrusted workspace content, reissue the Azure Speech resource's access material",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Usage CSV formula injection (GHSA-xx9p-hc9w-6p5h)",
+    message: "GHSA-xx9p-hc9w-6p5h: Control UI usage CSV export did not neutralize leading formula characters in session labels, so opening the export in a spreadsheet could evaluate sender-influenced cells (CVSS 5.4)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "OpenAI-compatible endpoint misrouting (GHSA-vhpg-cq3w-v8p9)",
+    message: "GHSA-vhpg-cq3w-v8p9: after a model hot reload, a pinned third-party OpenAI-compatible session lacking a concrete base URL could send its provider auth header to the SDK default endpoint (CVSS 5.4)",
+    fix: "Upgrade to OpenClaw v2026.8.1+. If you observed misleading auth errors on a third-party provider, reissue that provider's access material",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "QQBot voice filename traversal (GHSA-rm45-4jx5-2927)",
+    message: "GHSA-rm45-4jx5-2927: QQBot voice attachment filenames were decoded twice, so encoded traversal segments could escape the voice staging directory (CVSS 5.4)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "sessions.create admin scope (GHSA-j4mm-p864-vx7f)",
+    message: "GHSA-j4mm-p864-vx7f: an operator.write caller could target an existing session key via sessions.create with model/thinking changes that sessions.patch reserves for operator.admin (CVSS 5.4)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Twilio pre-auth rate-limit lockout (GHSA-xw48-j584-r73h)",
+    message: "GHSA-xw48-j584-r73h: the SMS webhook applied its invalid-request rate limit before signature verification keyed on the raw proxy socket, so an unauthenticated sender behind a shared proxy could lock out valid Twilio callbacks (CVSS 5.3)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Feishu unpin cross-context policy (GHSA-h9jh-75j7-7hhx)",
+    message: "GHSA-h9jh-75j7-7hhx: the Feishu unpin action's native chatId was not declared as a delivery target, bypassing the same-provider cross-context check (CVSS 4.3)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  {
+    fixedIn: "2026.8.1",
+    severity: "warn",
+    check: "Active Memory recall requester policy (GHSA-wjfv-5qch-m5vj)",
+    message: "GHSA-wjfv-5qch-m5vj: Active Memory automatic recall ignored the requester's effective tool policy, injecting durable memory even when toolsBySender denied memory tools (CVSS 3.1)",
+    fix: "Upgrade to OpenClaw v2026.8.1+",
+  },
+  // v2026.8.2 fixes
+  {
+    fixedIn: "2026.8.2",
+    severity: "warn",
+    check: "Browser relay pending-auth exhaustion (GHSA-m78m-7h3q-q938)",
+    message: "GHSA-m78m-7h3q-q938: the Browser extension relay reserved global pending-authentication slots before relay-key possession was proven, so an unauthenticated network source could block paired extensions from authenticating (CVSS 5.3)",
+    fix: "Upgrade to OpenClaw v2026.8.2+. Until then, keep the browser relay route off lower-trust networks",
+  },
+  // v2026.8.11 fixes
+  {
+    fixedIn: "2026.8.11",
+    severity: "fail",
+    check: "iOS Control UI TLS pin enforcement (GHSA-jjpc-p3xf-8g7p)",
+    message: "GHSA-jjpc-p3xf-8g7p: the iOS Control UI Terminal and Dashboard WebViews omitted the saved Gateway TLS fingerprint, so a redirected host with a system-trusted certificate could serve a replacement page that reads the injected Gateway token (CVSS 8.3; affects 2026.7.1 through 2026.8.10)",
+    fix: "Upgrade to OpenClaw v2026.8.11+ and update the iOS app",
+  },
+  // v2026.9.3 fixes
+  {
+    fixedIn: "2026.9.3",
+    severity: "warn",
+    check: "Discord asset upload media policy (GHSA-xvwp-wmh2-fq48)",
+    message: "GHSA-xvwp-wmh2-fq48: Discord emoji/sticker upload actions lost the sender-scoped media policy before loading a local file, allowing an out-of-policy host path into an outbound upload (CVSS 5.3)",
+    fix: "Upgrade @openclaw/discord (OpenClaw v2026.9.3+). Until then, deny Discord asset upload actions to lower-trust senders",
+  },
+  {
+    fixedIn: "2026.9.3",
+    severity: "warn",
+    check: "Prometheus diagnostics operator.read (GHSA-rx8p-qcpv-c7vr)",
+    message: "GHSA-rx8p-qcpv-c7vr: the Prometheus diagnostics plugin did not enforce operator.read on its authenticated metrics endpoint, exposing metrics to identity-bearing callers without read scope (CVSS 4.3)",
+    fix: "Upgrade @openclaw/diagnostics-prometheus (OpenClaw v2026.9.3+)",
+  },
 ];
 
 // Newest OpenClaw release this advisory table covers. Bump when refreshing the
 // table — the version-currency checks below key off it.
-export const ADVISORY_TABLE_CURRENT = "2026.7.1";
+export const ADVISORY_TABLE_CURRENT = "2026.9.4";
 
 export function auditSecurityAdvisories(openclawVersion: string): AuditResult[] {
   const results: AuditResult[] = [];

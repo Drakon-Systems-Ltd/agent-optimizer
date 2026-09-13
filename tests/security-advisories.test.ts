@@ -107,7 +107,8 @@ describe("auditSecurityAdvisories", () => {
     ).toBe(true);
     const summary = results.find((r) => r.check === "Advisory summary");
     expect(summary?.status).toBe("fail");
-    expect(summary?.message).toContain("2026.7.1");
+    // upgrade target is the newest fixedIn across everything applicable
+    expect(summary?.message).toContain("upgrade to v2026.9.3+");
   });
 
   it("flags only 2026.7.1 advisories for a 2026.6.11 install", () => {
@@ -118,9 +119,110 @@ describe("auditSecurityAdvisories", () => {
   });
 
   it("notes advisory-data staleness when detected version is newer than the table", () => {
-    const results = auditSecurityAdvisories("2026.8.1");
+    const results = auditSecurityAdvisories("2026.10.1");
     expect(
       results.some((r) => r.check === "Advisory data currency" && r.status === "info")
     ).toBe(true);
+  });
+
+  it("does not note staleness for a version the table covers", () => {
+    const results = auditSecurityAdvisories("2026.8.1");
+    expect(results.some((r) => r.check === "Advisory data currency")).toBe(false);
+  });
+
+  it("covers the OpenClaw releases through 2026.9.4", () => {
+    expect(ADVISORY_TABLE_CURRENT).toBe("2026.9.4");
+  });
+
+  // ── September 2026 GHSA batch (published 2026-09-11) ──────────────────────
+
+  it("flags the 2026.7.1 GHSAs missing from the older table for a 2026.6.11 install", () => {
+    const results = auditSecurityAdvisories("2026.6.11");
+    expect(
+      results.some((r) => r.check === "MCP config owner auth (GHSA-wwx7-573h-pqwc)" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Codex computer-use install owner auth (GHSA-pjjr-5qhr-5w6r)" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Group activation owner auth (GHSA-q9j5-4xr6-xqqw)" && r.status === "warn")
+    ).toBe(true);
+  });
+
+  it("flags 2026.8.1 through 2026.9.3 advisories for a 2026.7.1 install and nothing older", () => {
+    const results = auditSecurityAdvisories("2026.7.1");
+    // 2026.7.1 fixes are NOT flagged
+    expect(results.some((r) => r.check === "SecretRef process exposure")).toBe(false);
+    expect(results.some((r) => r.check === "MCP config owner auth (GHSA-wwx7-573h-pqwc)")).toBe(false);
+    // 2026.8.1 fixes ARE flagged
+    expect(
+      results.some((r) => r.check === "Codex native tools per-chat policy (GHSA-wwcw-jfpp-gpxw)" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Browser CDP DNS pinning (GHSA-p3h6-v2h4-36q2)" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Active Memory recall requester policy (GHSA-wjfv-5qch-m5vj)" && r.status === "warn")
+    ).toBe(true);
+    // and the later ones
+    expect(
+      results.some((r) => r.check === "iOS Control UI TLS pin enforcement (GHSA-jjpc-p3xf-8g7p)" && r.status === "fail")
+    ).toBe(true);
+    const summary = results.find((r) => r.check === "Advisory summary");
+    expect(summary?.status).toBe("fail");
+    expect(summary?.message).toContain("2026.9.3");
+  });
+
+  it("flags only 2026.8.2+ advisories for a 2026.8.1 install", () => {
+    const results = auditSecurityAdvisories("2026.8.1");
+    // 2026.8.1 fixes are NOT flagged
+    expect(results.some((r) => r.check === "Codex native tools per-chat policy (GHSA-wwcw-jfpp-gpxw)")).toBe(false);
+    expect(results.some((r) => r.check === "Matrix case-distinct user ID conflation (GHSA-hgv5-f2r3-6v9r)")).toBe(false);
+    // 2026.8.2 / 2026.8.11 / 2026.9.3 fixes ARE flagged
+    expect(
+      results.some((r) => r.check === "Browser relay pending-auth exhaustion (GHSA-m78m-7h3q-q938)" && r.status === "warn")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "iOS Control UI TLS pin enforcement (GHSA-jjpc-p3xf-8g7p)" && r.status === "fail")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Discord asset upload media policy (GHSA-xvwp-wmh2-fq48)" && r.status === "warn")
+    ).toBe(true);
+    expect(
+      results.some((r) => r.check === "Prometheus diagnostics operator.read (GHSA-rx8p-qcpv-c7vr)" && r.status === "warn")
+    ).toBe(true);
+    const applicable = results.filter((r) => r.check.includes("GHSA-"));
+    expect(applicable).toHaveLength(4);
+  });
+
+  it("flags only the 2026.9.3 advisories for a 2026.8.11 install", () => {
+    const results = auditSecurityAdvisories("2026.8.11");
+    expect(results.some((r) => r.check === "iOS Control UI TLS pin enforcement (GHSA-jjpc-p3xf-8g7p)")).toBe(false);
+    const applicable = results.filter((r) => r.check.includes("GHSA-"));
+    expect(applicable.map((r) => r.check).sort()).toEqual([
+      "Discord asset upload media policy (GHSA-xvwp-wmh2-fq48)",
+      "Prometheus diagnostics operator.read (GHSA-rx8p-qcpv-c7vr)",
+    ]);
+    const summary = results.find((r) => r.check === "Advisory summary");
+    expect(summary?.status).toBe("warn");
+  });
+
+  it("is clean on 2026.9.3 and 2026.9.4", () => {
+    for (const v of ["2026.9.3", "2026.9.4"]) {
+      const results = auditSecurityAdvisories(v);
+      expect(results.some((r) => r.check === "Security advisories" && r.status === "pass")).toBe(true);
+      expect(results.some((r) => r.check === "Advisory summary")).toBe(false);
+      expect(results.some((r) => r.check === "Advisory data currency")).toBe(false);
+    }
+  });
+
+  it("includes the GHSA id in every September-batch check name", () => {
+    const results = auditSecurityAdvisories("2026.6.11");
+    const sept = results.filter((r) => r.check.includes("GHSA-") && r.check !== "DOMPurify XSS (GHSA-cmwh-pvxp-8882)");
+    expect(sept.length).toBe(30);
+    for (const r of sept) {
+      expect(r.check).toMatch(/\(GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}\)$/);
+      expect(r.message).toMatch(/^GHSA-/);
+    }
   });
 });
