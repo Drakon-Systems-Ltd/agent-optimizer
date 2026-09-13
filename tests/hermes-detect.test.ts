@@ -33,14 +33,52 @@ describe("detectSystems — Hermes", () => {
     expect(systems.filter((s) => s.kind === "hermes")).toHaveLength(0);
   });
 
-  it("includes Hermes version when hermes CLI succeeds", () => {
+  it("includes Hermes version when hermes CLI succeeds (semver form)", () => {
     vi.mocked(existsSync).mockImplementation((p) => String(p) === HERMES_USER);
     vi.mocked(execSync).mockImplementation((cmd) => {
-      if (String(cmd).startsWith("hermes --version")) return Buffer.from("hermes 0.15.2") as never;
+      if (String(cmd).startsWith("hermes --version")) return Buffer.from("hermes 0.21.2") as never;
       throw new Error("not found");
     });
     const systems = detectSystems(CWD);
-    expect(systems[0].version).toBe("0.15.2");
+    expect(systems[0].version).toBe("0.21.2");
+  });
+
+  it("handles the v2026.9.11 date-tag form of hermes --version", () => {
+    vi.mocked(existsSync).mockImplementation((p) => String(p) === HERMES_USER);
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      if (String(cmd).startsWith("hermes --version")) return Buffer.from("hermes v2026.9.11") as never;
+      throw new Error("not found");
+    });
+    const systems = detectSystems(CWD);
+    expect(systems[0].version).toBe("2026.9.11");
+  });
+
+  it("reports the semver form when hermes --version prints both schemes", () => {
+    vi.mocked(existsSync).mockImplementation((p) => String(p) === HERMES_USER);
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      if (String(cmd).startsWith("hermes --version")) return Buffer.from("Hermes Agent 0.21.2 (v2026.9.11)") as never;
+      throw new Error("not found");
+    });
+    const systems = detectSystems(CWD);
+    expect(systems[0].version).toBe("0.21.2");
+  });
+
+  it("honours HERMES_HOME for the Hermes config path", () => {
+    const prev = process.env.HERMES_HOME;
+    process.env.HERMES_HOME = "/custom/hermes-home";
+    try {
+      const custom = resolve("/custom/hermes-home", "config.yaml");
+      vi.mocked(existsSync).mockImplementation((p) => String(p) === custom);
+      const systems = detectSystems(CWD);
+      expect(systems).toHaveLength(1);
+      expect(systems[0]).toMatchObject({ kind: "hermes", configPath: custom });
+      // and the default ~/.hermes is NOT consulted while HERMES_HOME is set
+      vi.mocked(existsSync).mockImplementation((p) => String(p) === HERMES_USER);
+      expect(detectSystems(CWD).filter((s) => s.kind === "hermes")).toHaveLength(0);
+    } finally {
+      if (prev === undefined) delete process.env.HERMES_HOME;
+      else process.env.HERMES_HOME = prev;
+    }
   });
 
   it("returns null version when hermes CLI is not available", () => {

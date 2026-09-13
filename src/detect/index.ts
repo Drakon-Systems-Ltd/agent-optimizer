@@ -18,17 +18,34 @@ function detectClaudeCodeVersion(): string | null {
   }
 }
 
+/**
+ * Hermes Agent carries two version schemes side by side — semver (0.21.2) and
+ * a date tag (v2026.9.11) — and `hermes --version` may print either or both.
+ * Prefer the semver form when both appear (a "major" of 2000+ is a date tag).
+ */
+export function parseHermesVersion(out: string): string | null {
+  const all = [...out.matchAll(/v?(\d+\.\d+\.\d+(?:-[\w.]+)?)/g)].map((m) => m[1]);
+  if (all.length === 0) return null;
+  const semver = all.find((v) => Number(v.split(".")[0]) < 2000);
+  return semver ?? all[0];
+}
+
 function detectHermesVersion(): string | null {
   try {
     const out = execSync("hermes --version 2>/dev/null", {
       timeout: 3000,
       encoding: "utf-8",
     }).toString().trim();
-    const m = out.match(/(\d+\.\d+\.\d+(?:-[\w.]+)?)/);
-    return m ? m[1] : null;
+    return parseHermesVersion(out);
   } catch {
     return null;
   }
+}
+
+/** Hermes home: $HERMES_HOME when set (profiles use <root>/profiles/<name>), else ~/.hermes. */
+export function resolveHermesHome(): string {
+  const env = process.env.HERMES_HOME?.trim();
+  return env ? env : resolve(homedir(), ".hermes");
 }
 
 export function detectSystems(cwd: string = process.cwd()): DetectedSystem[] {
@@ -68,8 +85,10 @@ export function detectSystems(cwd: string = process.cwd()): DetectedSystem[] {
     });
   }
 
-  // Hermes Agent — user scope (read-only support: audit, no optimize/fix)
-  const hermesUser = resolve(homedir(), ".hermes", "config.yaml");
+  // Hermes Agent — user scope (read-only support: audit, no optimize/fix).
+  // Honours HERMES_HOME; named profiles under <home>/profiles/ are discovered
+  // by the Hermes runner, not listed as separate systems.
+  const hermesUser = resolve(resolveHermesHome(), "config.yaml");
   if (existsSync(hermesUser)) {
     systems.push({
       kind: "hermes",

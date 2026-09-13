@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "fs";
-import { resolve } from "path";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join, resolve } from "path";
 import { parse as parseYaml } from "yaml";
 import type { AuditResult } from "../../types.js";
 import { expandPath } from "../../utils/config.js";
@@ -13,6 +13,8 @@ import { auditHermesChannelSecurity } from "./channel-security.js";
 import { auditHermesPrivacy } from "./privacy.js";
 import { auditHermesSkillsSafety } from "./skills-safety.js";
 import { auditHermesAuthHygiene } from "./auth-hygiene.js";
+import { auditHermesConfigVersion } from "./config-version.js";
+import { auditHermesRemovedKeys } from "./removed-keys.js";
 
 // Hermes Agent support is READ-ONLY: audit findings only, no optimize/fix
 // paths, nothing autoFixable — so every finding stamps machineFixable: false.
@@ -22,12 +24,43 @@ interface AuditorModule {
   run: () => AuditResult[];
 }
 
+export interface HermesProfile {
+  name: string;
+  dir: string;
+}
+
+// Named profiles live at <hermes-home>/profiles/<name>/ and are full Hermes
+// homes of their own (config.yaml, auth.json, ...). Hermes skips names that
+// start with "." and refuses tombstoned profiles (profiles/.deleted/<name>,
+// written by `hermes profile delete`) — mirror both so we never audit a
+// profile Hermes itself would refuse to load.
+const PROFILES_DIR = "profiles";
+const DELETED_PROFILES_DIR = ".deleted";
+
+/** List live named profiles under a Hermes home. Read-only; missing dir = []. */
+export function discoverHermesProfiles(hermesDir: string): HermesProfile[] {
+  const profilesDir = join(expandPath(hermesDir), PROFILES_DIR);
+  if (!existsSync(profilesDir)) return [];
+  let entries: string[];
+  try {
+    entries = readdirSync(profilesDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((name) => !existsSync(join(profilesDir, DELETED_PROFILES_DIR, name)))
+    .filter((name) => existsSync(join(profilesDir, name, "config.yaml")))
+    .sort()
+    .map((name) => ({ name, dir: join(profilesDir, name) }));
+}
+
 /**
- * Run all Hermes auditors against a Hermes home directory (normally ~/.hermes;
- * tests pass a temp dir). Reads config.yaml + auth.json; never writes.
+ * Run all Hermes auditors against one Hermes home (root or a named profile).
+ * Reads config.yaml + auth.json; never writes.
  */
-export function runHermesAuditors(hermesDir: string): AuditResult[] {
-  const dir = expandPath(hermesDir);
+function auditHermesHome(dir: string): AuditResult[] {
   const configPath = resolve(dir, "config.yaml");
   const results: AuditResult[] = [];
 
@@ -69,8 +102,10 @@ export function runHermesAuditors(hermesDir: string): AuditResult[] {
 
   const auditors: AuditorModule[] = config
     ? [
+        { name: "Hermes Config Version", run: () => auditHermesConfigVersion(config!) },
         { name: "Hermes Model Config", run: () => auditHermesModelConfig(config!) },
         { name: "Hermes Config Shape", run: () => auditHermesConfigShape(config!) },
+        { name: "Hermes Removed Keys", run: () => auditHermesRemovedKeys(config!) },
         { name: "Hermes Approvals", run: () => auditHermesApprovals(config!) },
         { name: "Hermes Caching", run: () => auditHermesPromptCaching(config!) },
         { name: "Hermes Compression", run: () => auditHermesCompression(config!) },
@@ -98,6 +133,43 @@ export function runHermesAuditors(hermesDir: string): AuditResult[] {
         message: `Auditor "${auditor.name}" errored on this config and was skipped: ${(err as Error).message}`,
         system: "hermes" as const,
       });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Run the Hermes auditor family against a Hermes home directory (normally
+ * ~/.hermes or $HERMES_HOME; tests pass a temp dir) and against every live
+ * named profile under <home>/profiles/<name>/. Profile findings are labelled
+ * with the profile name in `check` so ids stay distinct from the root's.
+ */
+export function runHermesAuditors(
+  hermesDir: string,
+  opts: { includeProfiles?: boolean } = {}
+): AuditResult[] {
+  const dir = expandPath(hermesDir);
+  const results = auditHermesHome(dir);
+
+  if (opts.includeProfiles === false) return results;
+
+  const profiles = discoverHermesProfiles(dir);
+  if (profiles.length > 0) {
+    results.push({
+      category: "Hermes Profiles",
+      check: "Named profiles",
+      status: "info",
+      message: `${profiles.length} named Hermes profile(s) under profiles/: ${profiles.map((p) => p.name).join(", ")} — each audited below`,
+      system: "hermes" as const,
+    });
+    for (const profile of profiles) {
+      results.push(
+        ...auditHermesHome(profile.dir).map((r) => ({
+          ...r,
+          check: `[profile ${profile.name}] ${r.check}`,
+        }))
+      );
     }
   }
 

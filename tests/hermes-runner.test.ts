@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { runHermesAuditors } from "../src/auditors/hermes/index.js";
+import { runHermesAuditors, discoverHermesProfiles } from "../src/auditors/hermes/index.js";
 import { auditHermesAuthHygiene } from "../src/auditors/hermes/auth-hygiene.js";
 
 // End-to-end runner tests: real YAML fixtures written to a temp dir (never the
@@ -124,6 +124,115 @@ describe("runHermesAuditors", () => {
     expect(warn).toBeDefined();
     expect(warn!.status).toBe("warn");
     expect(warn!.system).toBe("hermes");
+  });
+});
+
+describe("runHermesAuditors — named profiles", () => {
+  function writeProfile(name: string, yaml: string): string {
+    const dir = join(TEST_DIR, "profiles", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "config.yaml"), yaml);
+    return dir;
+  }
+
+  it("emits no profile findings when profiles/ is absent", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    const results = runHermesAuditors(dir);
+    expect(results.some((r) => r.category === "Hermes Profiles")).toBe(false);
+    expect(results.some((r) => r.check.startsWith("[profile "))).toBe(false);
+  });
+
+  it("discovers live profiles and lists them", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    writeProfile("work", HEALTHY_CONFIG);
+    writeProfile("home", HEALTHY_CONFIG);
+    expect(discoverHermesProfiles(dir).map((p) => p.name)).toEqual(["home", "work"]);
+    const info = runHermesAuditors(dir).find((r) => r.category === "Hermes Profiles");
+    expect(info?.status).toBe("info");
+    expect(info?.message).toContain("2 named Hermes profile(s)");
+    expect(info?.message).toContain("home, work");
+    expect(info?.system).toBe("hermes");
+  });
+
+  it("audits each profile config and labels findings with the profile name", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    writeProfile(
+      "work",
+      [
+        "model:",
+        "  default: claude-sonnet-4-6",
+        `fallback_providers: "[{'provider': 'openrouter'}]"`,
+        "_config_version: 11",
+        "cron:",
+        "  model_drift_guard: true",
+        "",
+      ].join("\n")
+    );
+    const results = runHermesAuditors(dir);
+    // root stays clean
+    expect(results.filter((r) => r.status === "fail" && !r.check.startsWith("[profile "))).toHaveLength(0);
+    // profile findings are labelled, stamped hermes, still read-only
+    const fail = results.find((r) => r.check === "[profile work] fallback_providers stored as list");
+    expect(fail?.status).toBe("fail");
+    expect(fail?.system).toBe("hermes");
+    expect(results.find((r) => r.check === "[profile work] Config schema version")?.status).toBe("warn");
+    expect(results.find((r) => r.check === "[profile work] cron.model_drift_guard")?.status).toBe("warn");
+    expect(results.every((r) => r.autoFixable !== true && r.apply === undefined)).toBe(true);
+  });
+
+  it("reads a profile's own auth.json", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    const profileDir = writeProfile("work", HEALTHY_CONFIG);
+    writeFileSync(
+      join(profileDir, "auth.json"),
+      JSON.stringify({ providers: { openai: { expires_at: Date.now() - 3600_000 } } })
+    );
+    const results = runHermesAuditors(dir);
+    expect(results.find((r) => r.check === "[profile work] Token expiry: openai")?.status).toBe("warn");
+    expect(results.some((r) => r.check === "Token expiry: openai")).toBe(false);
+  });
+
+  it("skips dot-directories, tombstoned profiles and dirs without config.yaml", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    writeProfile("live", HEALTHY_CONFIG);
+    writeProfile(".hidden", HEALTHY_CONFIG);
+    writeProfile("gone", HEALTHY_CONFIG);
+    mkdirSync(join(TEST_DIR, "profiles", ".deleted"), { recursive: true });
+    writeFileSync(join(TEST_DIR, "profiles", ".deleted", "gone"), "deleted\n");
+    mkdirSync(join(TEST_DIR, "profiles", "empty"), { recursive: true });
+    writeFileSync(join(TEST_DIR, "profiles", "not-a-dir"), "");
+    expect(discoverHermesProfiles(dir).map((p) => p.name)).toEqual(["live"]);
+    const checks = runHermesAuditors(dir).map((r) => r.check);
+    expect(checks.some((c) => c.startsWith("[profile live]"))).toBe(true);
+    expect(checks.some((c) => c.startsWith("[profile gone]"))).toBe(false);
+    expect(checks.some((c) => c.startsWith("[profile .hidden]"))).toBe(false);
+    expect(checks.some((c) => c.startsWith("[profile empty]"))).toBe(false);
+  });
+
+  it("can be told to audit the root only", () => {
+    const dir = writeConfig(HEALTHY_CONFIG);
+    writeProfile("work", HEALTHY_CONFIG);
+    const results = runHermesAuditors(dir, { includeProfiles: false });
+    expect(results.some((r) => r.check.startsWith("[profile "))).toBe(false);
+  });
+});
+
+describe("runHermesAuditors — 0.21.2 drift checks through the runner", () => {
+  it("passes the config-version check on a current schema and warns below the floor", () => {
+    const ok = runHermesAuditors(writeConfig(`${HEALTHY_CONFIG}_config_version: 44\n`));
+    expect(ok.find((r) => r.check === "Config schema version")?.status).toBe("pass");
+    const old = runHermesAuditors(writeConfig(`${HEALTHY_CONFIG}_config_version: 5\n`));
+    const r = old.find((r) => r.check === "Config schema version");
+    expect(r?.status).toBe("warn");
+    expect(r?.system).toBe("hermes");
+  });
+
+  it("warns on removed keys through the runner", () => {
+    const results = runHermesAuditors(
+      writeConfig(`${HEALTHY_CONFIG}gateway:\n  multiplex_profile_allowlist: [work]\nplugins:\n  enabled: [nemo_relay]\n`)
+    );
+    expect(results.find((r) => r.check === "gateway.multiplex_profile_allowlist")?.status).toBe("warn");
+    expect(results.find((r) => r.check === "Legacy Relay plugin in plugins.enabled")?.status).toBe("warn");
   });
 });
 
