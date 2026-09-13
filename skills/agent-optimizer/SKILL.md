@@ -10,7 +10,7 @@ description: >
 license: SEE LICENSE IN LICENSE.md
 metadata:
   author: Drakon Systems
-  version: 0.14.0
+  version: 0.15.0
   category: devtools
   tags:
     - openclaw-audit
@@ -80,7 +80,7 @@ install:
 **Audit, optimize, and secure your Claude Code and OpenClaw AI agent deployments.**
 
 29 auditor modules (25 OpenClaw + 4 Claude Code), 70+ checks. Free to install and run.
-Current to OpenClaw v2026.7.
+Current to OpenClaw v2026.9.4 and Hermes Agent 0.21.2 (named profiles under `~/.hermes/profiles/` audited too).
 
 ## What It Reads (and doesn't)
 

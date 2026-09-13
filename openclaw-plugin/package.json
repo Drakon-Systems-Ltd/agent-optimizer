@@ -1,6 +1,6 @@
 {
   "name": "@jarvis-drakon/agent-optimizer-openclaw-plugin",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "OpenClaw plugin exposing agent-optimizer's audit/plan/apply/rollback/scan verbs as agent tools. Mutating tools are approval-gated.",
   "author": "Drakon Systems Ltd <support@drakonsystems.com>",
   "license": "SEE LICENSE IN LICENSE.md",
@@ -64,7 +64,7 @@
       "pluginApi": ">=2026.5.17"
     },
     "build": {
-      "openclawVersion": "2026.7.1"
+      "openclawVersion": "2026.9.4"
     }
   }
 }

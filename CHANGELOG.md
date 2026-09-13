@@ -5,6 +5,78 @@ All notable changes to Agent Optimizer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0]
+
+The **September drift** release: current to OpenClaw v2026.9.4 and Hermes
+Agent 0.21.2 (a.k.a. v2026.9.11 — Hermes now carries both version schemes).
+
+### Added
+
+- **30 new OpenClaw security advisories (72 total, v2026.4.12–2026.9.3).**
+  Every OpenClaw GitHub Security Advisory published on 2026-09-11 whose
+  patched version is 2026.8.1, 2026.8.2, 2026.8.11 or 2026.9.3 (21 entries),
+  plus the nine 2026.7.1-patched GHSAs the table was missing. Each check name
+  carries its GHSA id (e.g. `Codex native tools per-chat policy
+  (GHSA-wwcw-jfpp-gpxw)`) so it can be looked up; high/critical map to
+  **fail**, medium/low to **warn**. Advisory data is now current to
+  v2026.9.4, so 2026.8.x / 2026.9.x installs no longer get the "data may be
+  behind" note.
+- **OpenClaw 2026.9.4 doctor migrations in the Legacy Config auditor.**
+  `channels.telegram.requireMention` and `routing.groupChat.requireMention`
+  (→ `channels.<channel>.groups."*".requireMention`),
+  `routing.groupChat.historyLimit/mentionPatterns` (→ `messages.groupChat.*`),
+  `routing.allowFrom`, `channels.webchat`, `tools.web.search.apiKey`
+  (→ `plugins.entries.<provider>.config.webSearch.apiKey`),
+  `tools.web.fetch.firecrawl` (→ `plugins.entries.firecrawl.config.webFetch`),
+  `tools.web.x_search.apiKey` (→ `plugins.entries.xai.config.webSearch.apiKey`),
+  retired `tools.web.x_search.model` values, retired `messages.queue.mode` /
+  `byChannel` values (`queue`, `steer-backlog`, `steer+backlog`),
+  `messages.tts`, `tts.enabled`, `session.threadBindings.ttlHours` /
+  `spawnSubagentSessions` / `spawnAcpSessions`, `session.typingMode`,
+  `session.maintenance.rotateBytes`, `session.parentForkMaxTokens`,
+  `session.resetByType.dm`, `cron.webhook`, `cron.runLog`, `agents.list`,
+  `agents.defaults.sandbox.perSession` / `model.timeoutMs` /
+  `silentReply.direct` / `memorySearch` / `systemPromptOverride`,
+  `gateway.bind` host aliases, `gateway.tailscale.resetOnExit` /
+  `serviceName`, `gateway.controlUi.dangerouslyDisableDeviceAuth` /
+  `toolTitles`, `skills.workshop.autonomous.enabled` /
+  `allowSymlinkTargetWrites`, `plugins.entries.codex-supervisor` /
+  `openai-codex`, `diagnostics.otel.protocol: grpc`,
+  `bindings[].match.peer.kind: dm`, `channels.feishu.accounts.<id>.botName`
+  and top-level `crestodian`. Messages mirror the upstream doctor rules.
+- **Hook Events** recognises `session:auto-reset` (new in v2026.9). The
+  registry now matches `KNOWN_INTERNAL_HOOK_EVENT_KEYS` in OpenClaw 2026.9.4.
+  `gateway:agent` is deliberately still flagged: upstream uses it only as a
+  `commandSource` value, never as an event key, so a subscription to it would
+  silently never fire.
+- **Hermes named profiles.** The Hermes runner discovers
+  `<hermes-home>/profiles/<name>/` and runs the whole auditor family against
+  each live profile's `config.yaml` + `auth.json`, labelling findings
+  `[profile <name>] …`. Dot-directories and profiles tombstoned by
+  `hermes profile delete` (`profiles/.deleted/<name>`) are skipped, matching
+  Hermes' own loader. Still read-only.
+- **Hermes config schema version check.** Reads `_config_version`; a value
+  below Hermes' auto-migration support floor (v12) **warns** that Hermes will
+  not auto-migrate the file (retired keys persist silently) and gives the
+  upstream remedy; an in-support but stale version is an info note; v44 (the
+  0.21.2 schema) passes. Absent = fresh config, no finding.
+- **Hermes removed-key warnings** from config migrations 38+:
+  `cron.model_drift_guard` (v42), `gateway.multiplex_profile_allowlist` (v43)
+  and the removed Relay plugin in `plugins.enabled` (`nemo_relay`,
+  `observability/nemo_relay`, v38), each with the upstream migration reason.
+- `HERMES_HOME` is honoured when locating the Hermes config.
+
+### Changed
+
+- **Hermes version detection** understands both schemes — `0.21.2` and
+  `v2026.9.11` — and reports the semver form when `hermes --version` prints
+  both.
+- Top-level `memorySearch` now points at its 2026.9.4 target `memory.search`
+  (was `agents.defaults.memorySearch`, itself now a legacy location).
+  Legacy web-search provider findings name the owning plugin
+  (`grok` → `xai`, `gemini` → `google`, `kimi` → `moonshot`).
+- Bundled OpenClaw plugin: built against OpenClaw 2026.9.4.
+
 ## [0.14.0]
 
 The **Hermes + honest-report** release: read-only Hermes Agent support, and a
