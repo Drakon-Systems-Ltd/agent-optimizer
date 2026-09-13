@@ -49,6 +49,38 @@ describe("auditHookEvents", () => {
     expect(auditHookEvents(config).every(r => r.status !== "fail")).toBe(true);
   });
 
+  it("does not flag the v2026.9 session:auto-reset event as unknown", () => {
+    const config: OpenClawConfig = {
+      hooks: { internal: { entries: { h: { event: "session:auto-reset" } } } },
+    };
+    expect(auditHookEvents(config).every(r => r.status !== "fail")).toBe(true);
+  });
+
+  it("recognises every key in the v2026.9.4 KNOWN_INTERNAL_HOOK_EVENT_KEYS list", () => {
+    const events = [
+      "agent:bootstrap", "command:new", "command:reset", "command:stop",
+      "gateway:pre-restart", "gateway:shutdown", "gateway:startup",
+      "message:preprocessed", "message:received", "message:sent", "message:transcribed",
+      "session:auto-reset", "session:compact:after", "session:compact:before", "session:patch",
+    ];
+    for (const event of events) {
+      const config: OpenClawConfig = {
+        hooks: { internal: { entries: { h: { event } } } },
+      };
+      expect(auditHookEvents(config).every(r => r.status !== "fail"), event).toBe(true);
+    }
+  });
+
+  it("still flags gateway:agent (a commandSource value, not an event key) and the docs' command:nwe example", () => {
+    for (const event of ["gateway:agent", "command:nwe"]) {
+      const config: OpenClawConfig = {
+        hooks: { internal: { entries: { h: { event } } } },
+      };
+      const results = auditHookEvents(config);
+      expect(results.some(r => r.status === "fail" && r.message.includes("Unknown hook event")), event).toBe(true);
+    }
+  });
+
   it("still flags a genuine typo of a v2026.6 event", () => {
     const config: OpenClawConfig = {
       hooks: { internal: { entries: { h: { event: "gateway:shutdwn" } } } },

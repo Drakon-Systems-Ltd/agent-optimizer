@@ -1,7 +1,10 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 
-// Known OpenClaw hook events as of v2026.3.14. Includes deprecated
-// before_agent_start (flagged separately by hooks-deprecations.ts).
+// Known OpenClaw hook events as of v2026.9.4 (source: src/hooks/internal-hook-types.ts
+// KNOWN_INTERNAL_HOOK_EVENT_KEYS + docs/automation/hooks/event-types.md). Includes
+// deprecated before_agent_start (flagged separately by hooks-deprecations.ts).
+// Note: `gateway:agent` is a commandSource value carried in command:reset context,
+// not an event key — subscribing to it never fires, so it stays unknown here.
 const KNOWN_EVENTS = new Set([
   "command:new", "command:reset", "command:stop",
   "session:compact:before", "session:compact:after",
@@ -14,6 +17,8 @@ const KNOWN_EVENTS = new Set([
   "before_agent_start",
   // v2026.6 additions
   "session:patch", "gateway:shutdown", "gateway:pre-restart",
+  // v2026.9 additions
+  "session:auto-reset",
   // bare event types (catch-all subscriptions): InternalHookEventType union
   "command", "session", "agent", "gateway", "message",
 ]);
