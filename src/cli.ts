@@ -22,7 +22,7 @@ import {
   canUseFleet,
   PRICING,
 } from "./licensing/index.js";
-import type { License, LicenseData } from "./licensing/index.js";
+import type { License, VerifiedLicenseClaims } from "./licensing/index.js";
 import { emitPlanError } from "./utils/cli-json.js";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -88,11 +88,13 @@ program.helpInformation = function () {
 
 // --- License helpers ---
 
-function hasValidLicense(): License | null {
+// Returns the SIGNED claims of a valid license — entitlement checks must use
+// these, never the unsigned `license.data` sidecar.
+function hasValidLicense(): VerifiedLicenseClaims | null {
   const license = loadLicense();
   if (!license) return null;
   const check = validateLicense(license);
-  return check.valid ? license : null;
+  return check.valid ? check.claims : null;
 }
 
 function printUpgradePrompt(feature: string): void {
@@ -158,7 +160,7 @@ function printFixSummary(
   }
 }
 
-function requireLicense(command: string): License {
+function requireLicense(command: string): VerifiedLicenseClaims {
   const license = hasValidLicense();
   if (!license) {
     printUpgradePrompt(
@@ -169,13 +171,13 @@ function requireLicense(command: string): License {
     process.exit(1);
   }
 
-  if (command === "fleet" && !canUseFleet(license.data.tier)) {
+  if (command === "fleet" && !canUseFleet(license.tier)) {
     console.log(
       chalk.red("\n✗ Fleet audit requires a Fleet or Lifetime license.\n")
     );
     console.log("Upgrade at: https://drakonsystems.com/products/agent-optimizer/buy?tier=fleet");
     console.log(
-      chalk.dim(`Current license: ${license.data.tier} (${license.data.email})`)
+      chalk.dim(`Current license: ${license.tier} (${license.email})`)
     );
     process.exit(1);
   }
@@ -216,12 +218,18 @@ program
       }
 
       const license = (await response.json()) as License;
+      // Verify before persisting: never save a license this CLI would reject.
+      const check = validateLicense(license);
+      if (!check.valid) {
+        console.log(chalk.red(`Activation failed: ${check.reason}`));
+        process.exit(1);
+      }
       saveLicense(license);
       console.log(chalk.green("✓ License activated successfully\n"));
-      console.log(`  Tier:    ${license.data.tier}`);
-      console.log(`  Email:   ${license.data.email}`);
+      console.log(`  Tier:    ${check.claims.tier}`);
+      console.log(`  Email:   ${check.claims.email}`);
       console.log(
-        `  Expires: ${license.data.expiresAt ?? "Never (lifetime)"}`
+        `  Expires: ${check.claims.expiresAt ?? "Never (lifetime)"}`
       );
       console.log(chalk.dim(`\n  Saved to: ${getLicensePath()}`));
     } catch (e) {
@@ -256,13 +264,21 @@ program
     }
 
     const check = validateLicense(license);
+    // Show signed claims when the token verified; otherwise the unsigned
+    // sidecar is display-only and never grants Fleet.
+    const shown = check.valid ? check.claims : check.claims ?? {
+      tier: String(license.data.tier ?? "unknown"),
+      email: String(license.data.email ?? ""),
+      expiresAt: license.data.expiresAt == null ? null : String(license.data.expiresAt),
+    };
+    const fleet = check.valid && canUseFleet(check.claims.tier);
     console.log(chalk.dim("  ┌─────────────────────────────────────────────┐"));
     console.log(chalk.dim("  │ ") + chalk.dim("Key     ") + chalk.white(license.key.padEnd(37)) + chalk.dim("│"));
-    console.log(chalk.dim("  │ ") + chalk.dim("Tier    ") + chalk.bold.white(license.data.tier.padEnd(37)) + chalk.dim("│"));
-    console.log(chalk.dim("  │ ") + chalk.dim("Email   ") + chalk.white(license.data.email.padEnd(37)) + chalk.dim("│"));
-    console.log(chalk.dim("  │ ") + chalk.dim("Expires ") + chalk.white((license.data.expiresAt ?? "Never (lifetime)").padEnd(37)) + chalk.dim("│"));
-    console.log(chalk.dim("  │ ") + chalk.dim("Status  ") + (check.valid ? chalk.green("Valid".padEnd(37)) : chalk.red((check.reason ?? "Invalid").padEnd(37))) + chalk.dim("│"));
-    console.log(chalk.dim("  │ ") + chalk.dim("Fleet   ") + (canUseFleet(license.data.tier) ? chalk.green("Yes".padEnd(37)) : chalk.dim("No (upgrade to Fleet)".padEnd(37))) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Tier    ") + chalk.bold.white(shown.tier.padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Email   ") + chalk.white(shown.email.padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Expires ") + chalk.white((shown.expiresAt ?? "Never (lifetime)").padEnd(37)) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Status  ") + (check.valid ? chalk.green("Valid".padEnd(37)) : chalk.red(check.reason.padEnd(37))) + chalk.dim("│"));
+    console.log(chalk.dim("  │ ") + chalk.dim("Fleet   ") + (fleet ? chalk.green("Yes".padEnd(37)) : chalk.dim("No (upgrade to Fleet)".padEnd(37))) + chalk.dim("│"));
     console.log(chalk.dim("  └─────────────────────────────────────────────┘\n"));
   });
 

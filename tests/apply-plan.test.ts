@@ -24,6 +24,7 @@ import {
   type PlanProposal,
 } from "../src/optimizers/plan.js";
 import { listBackups } from "../src/utils/backups.js";
+import { issueLicense, testKeyPair } from "./helpers/license-fixtures.js";
 
 const DIR = join(process.cwd(), "__test_apply_plan__");
 const CFG = join(DIR, "openclaw.json");
@@ -612,36 +613,33 @@ describe("mapApplyError — distinct slug + exit code per failure class", () => 
 // ── Part C: CLI wiring (spawned, hermetic HOME, hard timeout) ──────────────
 describe("cli optimize --apply-plan", () => {
   const CLI = join(process.cwd(), "src", "cli.ts");
+  const LOADER = join(process.cwd(), "tests", "helpers", "license-key-loader.mjs");
+  // Ephemeral issuer key: the test-only loader swaps it in for the embedded
+  // public key in the spawned CLI, so a genuinely signed solo license unlocks
+  // the licensed path without any production verification override.
+  const ISSUER = testKeyPair();
 
   function runCli(...args: string[]) {
-    return spawnSync(process.execPath, ["--import", "tsx", CLI, ...args], {
+    return spawnSync(process.execPath, ["--import", "tsx", "--import", LOADER, CLI, ...args], {
       encoding: "utf-8",
       cwd: process.cwd(),
-      env: { ...process.env, HOME: DIR },
+      env: {
+        ...process.env,
+        HOME: DIR,
+        AO_TEST_LICENSE_PUBKEY_B64: Buffer.from(ISSUER.publicPem).toString("base64"),
+      },
       timeout: 20000,
       killSignal: "SIGKILL",
     });
   }
 
-  // A license whose signature carries no "." skips JWT verification, and a null
-  // expiry never expires — so validateLicense() accepts it offline. HOME→DIR
-  // means the CLI reads it from DIR/.agent-optimizer/license.json.
+  // HOME→DIR means the CLI reads it from DIR/.agent-optimizer/license.json.
   function installLicense() {
     const dir = join(DIR, ".agent-optimizer");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, "license.json"),
-      JSON.stringify({
-        key: "AO-SOLO-DEADBEEF-CAFEBABE",
-        data: {
-          email: "t@example.com",
-          tier: "solo",
-          issuedAt: new Date().toISOString(),
-          expiresAt: null,
-          stripePaymentId: "x",
-        },
-        signature: "offline",
-      })
+      JSON.stringify(issueLicense(ISSUER.privateKey, { tier: "solo" }))
     );
   }
 

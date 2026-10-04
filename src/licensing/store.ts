@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import type { License } from "./keys.js";
 import { agentOptimizerHome } from "../utils/paths.js";
@@ -18,11 +18,20 @@ export function saveLicense(license: License): void {
 
 /**
  * Load the saved license from disk.
+ *
+ * Only checks the file is structurally a license (so callers can read its
+ * fields without crashing); authenticity is `validateLicense`'s job, and
+ * nothing loaded here is trusted until that passes.
  */
 export function loadLicense(): License | null {
   if (!existsSync(LICENSE_FILE)) return null;
   try {
-    return JSON.parse(readFileSync(LICENSE_FILE, "utf-8")) as License;
+    const parsed: unknown = JSON.parse(readFileSync(LICENSE_FILE, "utf-8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const { key, data, signature } = parsed as Record<string, unknown>;
+    if (typeof key !== "string" || typeof signature !== "string") return null;
+    if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+    return parsed as License;
   } catch {
     return null;
   }
@@ -33,7 +42,6 @@ export function loadLicense(): License | null {
  */
 export function removeLicense(): boolean {
   if (!existsSync(LICENSE_FILE)) return false;
-  const { unlinkSync } = require("fs");
   unlinkSync(LICENSE_FILE);
   return true;
 }

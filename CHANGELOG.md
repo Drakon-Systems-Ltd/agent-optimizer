@@ -5,6 +5,32 @@ All notable changes to Agent Optimizer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **License validation can no longer be bypassed with an unsigned or edited
+  `license.json`.** Previously the RSA check only ran when the stored
+  `signature` contained a `.`, so an empty or non-JWT signature with
+  `expiresAt: null` was accepted as a valid license of any tier, and tier and
+  expiry were always read from the unsigned `data` fields even when a genuine
+  token was present. Now every license must carry an RS256 token
+  (`alg: RS256`, `typ: JWT`, `product: agent-optimizer`) that verifies against
+  the embedded public key, with well-formed `tier`, `email`, `issued_at` and
+  `expires_at` claims. Entitlement (Fleet access) and expiry come from the
+  signed claims; the `data` sidecar must match the signed tier and email, and
+  its expiry can only shorten validity. `activate` verifies the server's
+  response before saving it. Genuine licenses issued by
+  drakonsystems.com are unaffected; hand-made or edited license files stop
+  working.
+
+### Fixed
+
+- `deactivate` no longer crashes with `require is not defined` (the license
+  store called CommonJS `require` from an ES module).
+- A corrupt or non-object `license.json` is treated as "no license" instead of
+  crashing `agent-optimizer license`.
+
 ## [0.15.0]
 
 The **September drift** release: current to OpenClaw v2026.9.4 and Hermes
