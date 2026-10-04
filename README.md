@@ -278,7 +278,7 @@ Purchase at [drakonsystems.com/products/agent-optimizer](https://drakonsystems.c
 
 Licenses are RSA-signed and verified offline — no phone-home, no telemetry, no account required. The only network call is the one-time activation.
 
-Every licensed command requires the server-issued RS256 token in `~/.agent-optimizer/license.json` to verify against the public key embedded in the CLI. Tier and expiry come from the signed token; the readable `data` fields beside it are display-only, and editing them (or removing the token) makes the license invalid rather than upgrading it. If `agent-optimizer license` reports an invalid signature for a key you bought, run `agent-optimizer activate <key>` again to fetch a fresh signed license.
+Every licensed command requires the server-issued RS256 token in `~/.agent-optimizer/license.json` to verify against the public key embedded in the CLI. Tier and expiry come from the signed token; the readable `data` fields beside it can never grant more. Their `tier` and `email` must match the signed claims, and their `expiresAt` can only shorten validity, never extend it past the signed expiry. Editing tier or email (or removing the token) makes the license invalid rather than upgrading it. If `agent-optimizer license` reports an invalid signature for a key you bought, run `agent-optimizer activate <key>` again to fetch a fresh signed license.
 
 Lost your key? [Retrieve it here](https://drakonsystems.com/products/agent-optimizer/license/retrieve).
 
