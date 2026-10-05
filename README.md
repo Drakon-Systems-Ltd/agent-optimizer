@@ -17,6 +17,10 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 Works on macOS, Linux, and Windows. Requires Node.js 20+.
 
+Version 0.15.1 requires a verified, signed license for paid features; unsigned
+or edited license files no longer unlock them. Existing genuine licenses from
+drakonsystems.com continue to work.
+
 ```bash
 npm install -g @drakon-systems/agent-optimizer
 ```
