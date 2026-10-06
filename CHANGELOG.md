@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- README "Development" now states the Node.js range the locked dev toolchain
+  needs (`^20.19.0 || ^22.12.0 || >=24.0.0`, Node 22 recommended to match CI),
+  separate from runtime support (still Node 20+), and gives `npx vitest run`
+  as the one-shot test command (`npm test` is watch mode).
+
 ## [0.15.1]
 
 ### Security
