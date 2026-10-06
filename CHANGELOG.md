@@ -40,7 +40,7 @@ Agent 0.21.2 (a.k.a. v2026.9.11 — Hermes now carries both version schemes).
 
 ### Added
 
-- **30 new OpenClaw security advisories (72 total, v2026.4.12–2026.9.3).**
+- **30 new OpenClaw security advisories (71 total, v2026.4.12–2026.9.3).**
   Every OpenClaw GitHub Security Advisory published on 2026-09-11 whose
   patched version is 2026.8.1, 2026.8.2, 2026.8.11 or 2026.9.3 (21 entries),
   plus the nine 2026.7.1-patched GHSAs the table was missing. Each check name
