@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   needs (`^20.19.0 || ^22.12.0 || >=24.0.0`, Node 22 recommended to match CI),
   separate from runtime support (still Node 20+), and gives `npx vitest run`
   as the one-shot test command (`npm test` is watch mode).
+- Root `--help` now lists `lifetime` alongside `solo` and `fleet` for
+  `buy --tier`, matching the tiers the command already accepts.
 
 ## [0.15.1]
 

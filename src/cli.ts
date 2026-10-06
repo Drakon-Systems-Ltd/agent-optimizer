@@ -70,7 +70,7 @@ program
       `    ${w("monitor disable")}                            ${d("Remove monitoring")}`,
       "",
       d("  UTILITY"),
-      `    ${w("buy")} ${d("[--tier solo|fleet]")}                    ${d("Open purchase page")}`,
+      `    ${w("buy")} ${d("[--tier solo|fleet|lifetime]")}           ${d("Open purchase page")}`,
       `    ${w("activate")} ${d("<key>")}       ${w("license")}          ${w("update")}`,
       `    ${w("deactivate")}          ${w("snapshot list")}     ${w("drift")}`,
       "",
