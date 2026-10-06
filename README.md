@@ -337,11 +337,19 @@ Channel Security
 
 ## Development
 
+Use **Node.js 22 (22.12 or later)** to work on this repo — CI runs Node 22.
+The published package still supports Node 20+ at runtime (`engines`), but the
+locked dev toolchain is stricter: Vite/Rolldown (pulled in by Vitest 4) need
+`^20.19.0 || >=22.12.0`, and Vitest needs `^20.0.0 || ^22.0.0 || >=24.0.0`.
+That leaves `^20.19.0 || ^22.12.0 || >=24.0.0`; older Node 20 minors and
+Node 23 are outside it. Only Node 22 is exercised by CI.
+
 ```bash
-npm install
-npx tsx src/cli.ts audit              # Run without building
-npm run build                          # Compile TypeScript
-npm test                               # Run tests (761 passing)
+npm ci                                 # Install from the lockfile (as CI does)
+npx tsx src/cli.ts audit               # Run without building
+npm run build                          # Compile TypeScript (tsc)
+npx vitest run                         # Run the test suite once (as CI does)
+npm test                               # Vitest in watch mode
 ```
 
 ## License
