@@ -1,8 +1,9 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 
 // Legacy config paths that OpenClaw's doctor migrates (2026.5–2026.9 window).
-// Source: src/commands/doctor/shared/legacy-config-migrations.*.ts and
-// src/config/web-search-legacy-provider-keys.ts in OpenClaw 2026.9.4
+// Sources: src/commands/doctor/shared/legacy-config-migrations.*.ts and
+// legacy-config-core-migrate.ts in OpenClaw 2026.9.4 and 2026.9.8, and
+// src/config/web-search-legacy-provider-keys.ts (unchanged through 2026.9.8).
 // (bundled as dist/legacy-*.mjs). Rule messages mirror the upstream
 // legacyRules so `openclaw doctor` and this audit tell the same story.
 
@@ -267,6 +268,34 @@ const LEGACY_PATH_RULES: LegacyPathRule[] = [
     fix: "Run: openclaw doctor --fix, then configure an OTLP/HTTP collector before re-enabling telemetry",
     match: (v) => typeof v === "string" && v.trim().toLowerCase() === "grpc",
   },
+  // 2026.9.5–2026.9.8 doctor migrations.
+  {
+    path: ["tools", "toolSearch", "mode"],
+    check: "tools.toolSearch.mode",
+    message: "tools.toolSearch.mode = code is retired — use structured Tool Search (tools)",
+    match: (v) => v === "code",
+  },
+  {
+    path: ["tools", "toolSearch", "codeTimeoutMs"],
+    check: "tools.toolSearch.codeTimeoutMs",
+    message: "tools.toolSearch.codeTimeoutMs is retired — Tool Search no longer executes code",
+  },
+  {
+    path: ["plugins", "entries", "github-copilot", "config", "discovery", "enabled"],
+    check: "plugins.entries.github-copilot.config.discovery.enabled",
+    message: "GitHub Copilot discovery.enabled is retired — discovery now refreshes automatically; use agents.defaults.modelPolicy.allow to hide models",
+  },
+  {
+    path: ["plugins", "entries", "github-copilot", "config", "discovery"],
+    check: "plugins.entries.github-copilot.config.discovery",
+    message: "An empty GitHub Copilot discovery block is retired — discovery now refreshes automatically",
+    match: (v) => !!v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0,
+  },
+  {
+    path: ["agents", "defaults", "silentReply", "internal"],
+    check: "agents.defaults.silentReply.internal",
+    message: "agents.defaults.silentReply.internal was removed — only channel groups may use NO_REPLY",
+  },
 ];
 
 function getPath(root: unknown, path: string[]): unknown {
@@ -276,6 +305,19 @@ function getPath(root: unknown, path: string[]): unknown {
     cur = (cur as Record<string, unknown>)[seg];
   }
   return cur;
+}
+
+export function isToolPolicyPath(path: string[]): boolean {
+  if (path.at(-1) === "tools" || path.includes("toolsBySender")) return true;
+  const i = path.lastIndexOf("byProvider");
+  return i >= 0 && path.slice(0, i).includes("tools");
+}
+
+function readGrantList(record: Record<string, unknown>, key: string): string[] | undefined {
+  const value = record[key];
+  return Array.isArray(value) && value.length > 0 && value.every((entry) => typeof entry === "string")
+    ? value as string[]
+    : undefined;
 }
 
 export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
@@ -374,6 +416,74 @@ export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
       message: rule.message,
       fix: rule.fix ?? doctorFix,
     });
+  }
+
+  // Code Mode rules use own-key presence, including keys with null values.
+  const reportCodeMode = (scope: unknown, label: string): void => {
+    const codeMode = getPath(scope, ["tools", "codeMode"]);
+    if (!codeMode || typeof codeMode !== "object" || Array.isArray(codeMode)) return;
+    const record = codeMode as Record<string, unknown>;
+    if (Object.hasOwn(record, "languages")) {
+      results.push({ category: "Legacy Config", check: `${label}tools.codeMode.languages`, status: "warn",
+        message: `${label}tools.codeMode.languages is retired — Code Mode now runs JavaScript only`,
+        fix: doctorFix });
+    }
+    if (Object.hasOwn(record, "runtime")) {
+      const path = `${label}tools.codeMode`;
+      results.push({ category: "Legacy Config", check: `${path}.runtime`, status: "warn",
+        message: record.runtime === "quickjs-wasi"
+          ? `${path}.runtime moved to ${path}.executor (quickjs-wasi becomes quickjs)`
+          : `${path}.runtime is retired — use ${path}.executor (openclaw doctor --fix only migrates quickjs-wasi)`,
+        fix: doctorFix });
+    }
+  };
+  reportCodeMode(config, "");
+
+  // Per-agent Code Mode keys. Mirrors OpenClaw 2026.9.8 visitAgentEntries:
+  // agents.entries.<id> when present, otherwise agents.list[i].
+  const agentScopes: Array<[string, unknown]> = [];
+  const agentEntries = getPath(config, ["agents", "entries"]);
+  const agentList = getPath(config, ["agents", "list"]);
+  if (agentEntries && typeof agentEntries === "object" && !Array.isArray(agentEntries)) {
+    for (const [id, agent] of Object.entries(agentEntries as Record<string, unknown>)) {
+      agentScopes.push([`agents.entries.${id}`, agent]);
+    }
+  } else if (Array.isArray(agentList)) {
+    agentList.forEach((agent, index) => agentScopes.push([`agents.list[${index}]`, agent]));
+  }
+  for (const [label, agent] of agentScopes) {
+    reportCodeMode(agent, `${label}.`);
+  }
+  const surfaces = getPath(config, ["surfaces"]);
+  if (surfaces && typeof surfaces === "object" && !Array.isArray(surfaces)) {
+    for (const [id, surface] of Object.entries(surfaces as Record<string, unknown>)) {
+      for (const key of ["direct", "internal"]) {
+        if (getPath(surface, ["silentReply", key]) == null) continue;
+        results.push({ category: "Legacy Config", check: `surfaces.${id}.silentReply.${key}`, status: "warn",
+          message: `surfaces.${id}.silentReply.${key} was removed — only channel groups may use NO_REPLY`, fix: doctorFix });
+      }
+    }
+  }
+
+  // Doctor merges safe allow/alsoAllow conflicts in core-owned tool policies.
+  const scanToolPolicies = (value: unknown, path: string[]): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => scanToolPolicies(entry, [...path, String(index)]));
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    if (path.at(-2) === "tools" && path.at(-1) === "sandbox") return;
+    if (isToolPolicyPath(path) && readGrantList(record, "allow") && readGrantList(record, "alsoAllow")) {
+      const label = path.join(".");
+      results.push({ category: "Legacy Config", check: `${label}.allow/alsoAllow`, status: "warn",
+        message: `${label} sets both allow and alsoAllow — doctor can merge safe conflicts; otherwise review the permission policy manually`,
+        fix: doctorFix });
+    }
+    for (const [key, entry] of Object.entries(record)) scanToolPolicies(entry, [...path, key]);
+  };
+  for (const root of ["tools", "agents", "channels", "gateway"]) {
+    scanToolPolicies(getPath(config, [root]), [root]);
   }
 
   // channels.feishu.accounts.<id>.botName → .name

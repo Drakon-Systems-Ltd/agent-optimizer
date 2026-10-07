@@ -530,11 +530,20 @@ const ADVISORIES: SecurityAdvisory[] = [
     message: "GHSA-rx8p-qcpv-c7vr: the Prometheus diagnostics plugin did not enforce operator.read on its authenticated metrics endpoint, exposing metrics to identity-bearing callers without read scope (CVSS 4.3)",
     fix: "Upgrade @openclaw/diagnostics-prometheus (OpenClaw v2026.9.3+)",
   },
+  // OpenClaw v2026.9.6 release notes: shared Rust Gateway client updated Rustls
+  // to 0.23.45, including the fix for GHSA-2mjx-qc3c-rqvc.
+  {
+    fixedIn: "2026.9.6",
+    severity: "warn",
+    check: "GHSA-2mjx-qc3c-rqvc (Rustls)",
+    message: "Shared Rust Gateway client includes a Rustls version affected by GHSA-2mjx-qc3c-rqvc",
+    fix: "Upgrade to OpenClaw v2026.9.6+",
+  },
 ];
 
 // Newest OpenClaw release this advisory table covers. Bump when refreshing the
 // table — the version-currency checks below key off it.
-export const ADVISORY_TABLE_CURRENT = "2026.9.4";
+export const ADVISORY_TABLE_CURRENT = "2026.9.8";
 
 export function auditSecurityAdvisories(openclawVersion: string): AuditResult[] {
   const results: AuditResult[] = [];

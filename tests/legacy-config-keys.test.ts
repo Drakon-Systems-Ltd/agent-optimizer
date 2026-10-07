@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditLegacyConfigKeys } from "../src/auditors/openclaw/legacy-config-keys.js";
+import { auditLegacyConfigKeys, isToolPolicyPath } from "../src/auditors/openclaw/legacy-config-keys.js";
 import type { OpenClawConfig } from "../src/types.js";
 
 describe("auditLegacyConfigKeys", () => {
@@ -256,6 +256,128 @@ describe("auditLegacyConfigKeys", () => {
     } as unknown as OpenClawConfig;
     const results = auditLegacyConfigKeys(config);
     expect(results.length).toBeGreaterThanOrEqual(5);
+    expect(results.every((r) => r.status === "warn" && r.category === "Legacy Config")).toBe(true);
+    expect(results.every((r) => r.fix?.includes("openclaw doctor --fix"))).toBe(true);
+  });
+
+  // ── 2026.9.5–2026.9.8 doctor migrations ─────────────────────────────────
+
+  it("flags global and per-agent Code Mode keys", () => {
+    const config = { tools: { codeMode: { languages: ["javascript"], runtime: "quickjs-wasi" } },
+      agents: { entries: { writer: { tools: { codeMode: { languages: ["javascript"], runtime: "quickjs-wasi" } } } } } } as unknown as OpenClawConfig;
+    const checks = auditLegacyConfigKeys(config).map((r) => r.check);
+    for (const check of ["tools.codeMode.languages", "tools.codeMode.runtime",
+      "agents.entries.writer.tools.codeMode.languages", "agents.entries.writer.tools.codeMode.runtime"]) {
+      expect(checks).toContain(check);
+    }
+    expect(auditLegacyConfigKeys({ tools: { codeMode: { executor: "quickjs" } } } as unknown as OpenClawConfig)).toHaveLength(0);
+  });
+
+  it("reports other Code Mode runtimes with the executor target", () => {
+    const config = { tools: { codeMode: { runtime: "quickjs" } },
+      agents: { entries: { w: { tools: { codeMode: { runtime: "other" } } } } } } as unknown as OpenClawConfig;
+    const results = auditLegacyConfigKeys(config);
+    for (const check of ["tools.codeMode.runtime", "agents.entries.w.tools.codeMode.runtime"]) {
+      const matches = results.filter((r) => r.check === check);
+      expect(matches).toHaveLength(1);
+      expect(matches[0].message).toContain("codeMode.executor");
+      expect(matches[0].fix).toContain("openclaw doctor --fix");
+    }
+  });
+
+  it("reports null Code Mode languages at global and agent scopes", () => {
+    const config = { tools: { codeMode: { languages: null } },
+      agents: { entries: { w: { tools: { codeMode: { languages: null } } } } } } as unknown as OpenClawConfig;
+    const checks = auditLegacyConfigKeys(config).map((r) => r.check);
+    expect(checks.filter((check) => check === "tools.codeMode.languages")).toHaveLength(1);
+    expect(checks.filter((check) => check === "agents.entries.w.tools.codeMode.languages")).toHaveLength(1);
+  });
+
+  it("flags retired Tool Search code mode and timeout", () => {
+    const config = { tools: { toolSearch: { mode: "code", codeTimeoutMs: 1000 } } } as unknown as OpenClawConfig;
+    const checks = auditLegacyConfigKeys(config).map((r) => r.check);
+    expect(checks).toContain("tools.toolSearch.mode");
+    expect(checks).toContain("tools.toolSearch.codeTimeoutMs");
+    expect(auditLegacyConfigKeys({ tools: { toolSearch: { mode: "tools" } } } as unknown as OpenClawConfig)).toHaveLength(0);
+  });
+
+  it("flags the retired Copilot discovery switch", () => {
+    const config = { plugins: { entries: { "github-copilot": { config: { discovery: { enabled: false } } } } } } as unknown as OpenClawConfig;
+    const result = auditLegacyConfigKeys(config).find((r) => r.check === "plugins.entries.github-copilot.config.discovery.enabled");
+    expect(result?.message).toContain("agents.defaults.modelPolicy.allow");
+    const emptyBlock = { plugins: { entries: { "github-copilot": { config: { discovery: {} } } } } } as unknown as OpenClawConfig;
+    expect(auditLegacyConfigKeys(emptyBlock).some((r) => r.check === "plugins.entries.github-copilot.config.discovery")).toBe(true);
+  });
+
+  it("flags per-agent Code Mode keys on an agents.list roster", () => {
+    const config = { agents: { list: [{ id: "a", tools: { codeMode: { languages: ["javascript"], runtime: "quickjs-wasi" } } }] } } as unknown as OpenClawConfig;
+    const checks = auditLegacyConfigKeys(config).map((r) => r.check);
+    expect(checks).toContain("agents.list[0].tools.codeMode.languages");
+    expect(checks).toContain("agents.list[0].tools.codeMode.runtime");
+  });
+
+  it("flags removed direct and internal silent reply scopes on surfaces", () => {
+    const config = { surfaces: { slack: { silentReply: { direct: true, internal: true, group: true } } } } as unknown as OpenClawConfig;
+    const results = auditLegacyConfigKeys(config);
+    expect(results.map((r) => r.check).sort()).toEqual(["surfaces.slack.silentReply.direct", "surfaces.slack.silentReply.internal"]);
+    expect(results.every((r) => r.message.includes("only channel groups may use NO_REPLY"))).toBe(true);
+  });
+
+  it("flags newly retired internal silent reply scopes", () => {
+    const config = { agents: { defaults: { silentReply: { internal: true } } },
+      surfaces: { telegram: { silentReply: { internal: false } } } } as unknown as OpenClawConfig;
+    const checks = auditLegacyConfigKeys(config).map((r) => r.check);
+    for (const check of ["agents.defaults.silentReply.internal", "surfaces.telegram.silentReply.internal"]) {
+      expect(checks).toContain(check);
+    }
+  });
+
+  it("flags doctor-repairable tool policy allow/alsoAllow conflicts", () => {
+    const config = { tools: { allow: ["read"], alsoAllow: ["write"] } } as unknown as OpenClawConfig;
+    const result = auditLegacyConfigKeys(config).find((r) => r.check === "tools.allow/alsoAllow");
+    expect(result?.status).toBe("warn");
+    expect(result?.message).toContain("review the permission policy");
+    expect(auditLegacyConfigKeys({ tools: { allow: ["read"], alsoAllow: [] } } as unknown as OpenClawConfig)).toHaveLength(0);
+  });
+
+  it("skips sandbox policies while still scanning sibling tool policies", () => {
+    const grants = { allow: ["read"], alsoAllow: ["exec"] };
+    const config = { tools: { ...grants, sandbox: { tools: grants } },
+      agents: { entries: { r: { tools: { sandbox: { tools: grants } } } } } } as unknown as OpenClawConfig;
+    const conflicts = auditLegacyConfigKeys(config).map((r) => r.check).filter((check) => check.includes("allow/alsoAllow"));
+    expect(conflicts).toEqual(["tools.allow/alsoAllow"]);
+  });
+
+  it("requires every grant-list entry to be a string", () => {
+    for (const grants of [
+      { allow: [1], alsoAllow: [{}] },
+      { allow: ["read", 2], alsoAllow: ["exec"] },
+      { allow: ["read"], alsoAllow: ["exec", 2] },
+    ]) {
+      const config = { tools: grants } as unknown as OpenClawConfig;
+      expect(auditLegacyConfigKeys(config).some((r) => r.check.includes("allow/alsoAllow"))).toBe(false);
+    }
+  });
+
+  it("recognizes byProvider as a policy only when tools precedes it", () => {
+    expect(isToolPolicyPath(["gateway", "byProvider", "x"])).toBe(false);
+    expect(isToolPolicyPath(["gateway", "byProvider", "x", "tools"])).toBe(true);
+    expect(isToolPolicyPath(["tools", "byProvider", "x"])).toBe(true);
+    const config = { gateway: { byProvider: { x: { allow: ["read"], alsoAllow: ["exec"],
+      tools: { allow: ["read"], alsoAllow: ["exec"] } } } } } as unknown as OpenClawConfig;
+    const conflicts = auditLegacyConfigKeys(config).map((r) => r.check).filter((check) => check.includes("allow/alsoAllow"));
+    expect(conflicts).toEqual(["gateway.byProvider.x.tools.allow/alsoAllow"]);
+  });
+
+  it("every 2026.9.8 finding is a warn pointing at doctor --fix", () => {
+    const config = { tools: { codeMode: { languages: [], runtime: "quickjs-wasi" },
+      toolSearch: { mode: "code", codeTimeoutMs: 100 } },
+      plugins: { entries: { "github-copilot": { config: { discovery: { enabled: true } } } } },
+      agents: { defaults: { silentReply: { internal: true } },
+        entries: { writer: { tools: { codeMode: { languages: [], runtime: "quickjs-wasi" } } } } },
+      surfaces: { telegram: { silentReply: { internal: true } } } } as unknown as OpenClawConfig;
+    const results = auditLegacyConfigKeys(config);
+    expect(results.length).toBeGreaterThanOrEqual(9);
     expect(results.every((r) => r.status === "warn" && r.category === "Legacy Config")).toBe(true);
     expect(results.every((r) => r.fix?.includes("openclaw doctor --fix"))).toBe(true);
   });

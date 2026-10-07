@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### OpenClaw 2026.9.8
+
+- Updated the declared OpenClaw target, bundled plugin build target, and
+  security advisory currency through v2026.9.8. Added the Rustls
+  GHSA-2mjx-qc3c-rqvc fix shipped with OpenClaw v2026.9.6.
+- Added Legacy Config findings for Code Mode languages/runtime (global and
+  per-agent), Tool Search code mode/timeout, the retired GitHub Copilot
+  discovery switch, removed `silentReply.internal` (defaults and surfaces) and
+  `surfaces.*.silentReply.direct`, and tool policies that set both
+  allow/alsoAllow to nonempty string lists outside sandbox scopes. Code Mode
+  languages/runtime findings use key presence, including null values; runtime
+  values other than quickjs-wasi are reported, though doctor only migrates
+  quickjs-wasi automatically.
+- Confirmed that OpenClaw's internal hook event list and web-search legacy
+  provider key list have identical source objects in v2026.9.4 and v2026.9.8.
+
 ### Documentation
 
 - README "Development" now states the Node.js range the locked dev toolchain
