@@ -16,7 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-agent), Tool Search code mode/timeout, the retired GitHub Copilot
   discovery switch, removed `silentReply.internal` (defaults and surfaces) and
   `surfaces.*.silentReply.direct`, and tool policies that set both
-  allow/alsoAllow.
+  allow/alsoAllow to nonempty string lists outside sandbox scopes. Code Mode
+  languages/runtime findings use key presence, including null values; runtime
+  values other than quickjs-wasi are reported, though doctor only migrates
+  quickjs-wasi automatically.
 - Confirmed that OpenClaw's internal hook event list and web-search legacy
   provider key list have identical source objects in v2026.9.4 and v2026.9.8.
 

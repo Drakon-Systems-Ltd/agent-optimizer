@@ -270,17 +270,6 @@ const LEGACY_PATH_RULES: LegacyPathRule[] = [
   },
   // 2026.9.5–2026.9.8 doctor migrations.
   {
-    path: ["tools", "codeMode", "languages"],
-    check: "tools.codeMode.languages",
-    message: "tools.codeMode.languages is retired — Code Mode now runs JavaScript only",
-  },
-  {
-    path: ["tools", "codeMode", "runtime"],
-    check: "tools.codeMode.runtime",
-    message: "tools.codeMode.runtime moved to tools.codeMode.executor (quickjs-wasi becomes quickjs)",
-    match: (v) => v === "quickjs-wasi",
-  },
-  {
     path: ["tools", "toolSearch", "mode"],
     check: "tools.toolSearch.mode",
     message: "tools.toolSearch.mode = code is retired — use structured Tool Search (tools)",
@@ -316,6 +305,19 @@ function getPath(root: unknown, path: string[]): unknown {
     cur = (cur as Record<string, unknown>)[seg];
   }
   return cur;
+}
+
+export function isToolPolicyPath(path: string[]): boolean {
+  if (path.at(-1) === "tools" || path.includes("toolsBySender")) return true;
+  const i = path.lastIndexOf("byProvider");
+  return i >= 0 && path.slice(0, i).includes("tools");
+}
+
+function readGrantList(record: Record<string, unknown>, key: string): string[] | undefined {
+  const value = record[key];
+  return Array.isArray(value) && value.length > 0 && value.every((entry) => typeof entry === "string")
+    ? value as string[]
+    : undefined;
 }
 
 export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
@@ -416,6 +418,27 @@ export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
     });
   }
 
+  // Code Mode rules use own-key presence, including keys with null values.
+  const reportCodeMode = (scope: unknown, label: string): void => {
+    const codeMode = getPath(scope, ["tools", "codeMode"]);
+    if (!codeMode || typeof codeMode !== "object" || Array.isArray(codeMode)) return;
+    const record = codeMode as Record<string, unknown>;
+    if (Object.hasOwn(record, "languages")) {
+      results.push({ category: "Legacy Config", check: `${label}tools.codeMode.languages`, status: "warn",
+        message: `${label}tools.codeMode.languages is retired — Code Mode now runs JavaScript only`,
+        fix: doctorFix });
+    }
+    if (Object.hasOwn(record, "runtime")) {
+      const path = `${label}tools.codeMode`;
+      results.push({ category: "Legacy Config", check: `${path}.runtime`, status: "warn",
+        message: record.runtime === "quickjs-wasi"
+          ? `${path}.runtime moved to ${path}.executor (quickjs-wasi becomes quickjs)`
+          : `${path}.runtime is retired — use ${path}.executor (openclaw doctor --fix only migrates quickjs-wasi)`,
+        fix: doctorFix });
+    }
+  };
+  reportCodeMode(config, "");
+
   // Per-agent Code Mode keys. Mirrors OpenClaw 2026.9.8 visitAgentEntries:
   // agents.entries.<id> when present, otherwise agents.list[i].
   const agentScopes: Array<[string, unknown]> = [];
@@ -429,17 +452,7 @@ export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
     agentList.forEach((agent, index) => agentScopes.push([`agents.list[${index}]`, agent]));
   }
   for (const [label, agent] of agentScopes) {
-    const languages = getPath(agent, ["tools", "codeMode", "languages"]);
-    if (languages !== undefined && languages !== null) {
-      results.push({ category: "Legacy Config", check: `${label}.tools.codeMode.languages`, status: "warn",
-        message: `${label}.tools.codeMode.languages is retired — Code Mode now runs JavaScript only`,
-        fix: doctorFix });
-    }
-    if (getPath(agent, ["tools", "codeMode", "runtime"]) === "quickjs-wasi") {
-      results.push({ category: "Legacy Config", check: `${label}.tools.codeMode.runtime`, status: "warn",
-        message: `${label}.tools.codeMode.runtime moved to ${label}.tools.codeMode.executor (quickjs-wasi becomes quickjs)`,
-        fix: doctorFix });
-    }
+    reportCodeMode(agent, `${label}.`);
   }
   const surfaces = getPath(config, ["surfaces"]);
   if (surfaces && typeof surfaces === "object" && !Array.isArray(surfaces)) {
@@ -460,11 +473,8 @@ export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
       return;
     }
     const record = value as Record<string, unknown>;
-    const isPolicy = path.at(-1) === "tools" || path.includes("toolsBySender") ||
-      (path.includes("byProvider") && path.includes("tools"));
-    if (isPolicy && !(path.at(-2) === "tools" && path.at(-1) === "sandbox") &&
-      Array.isArray(record.allow) && record.allow.length > 0 &&
-      Array.isArray(record.alsoAllow) && record.alsoAllow.length > 0) {
+    if (path.at(-2) === "tools" && path.at(-1) === "sandbox") return;
+    if (isToolPolicyPath(path) && readGrantList(record, "allow") && readGrantList(record, "alsoAllow")) {
       const label = path.join(".");
       results.push({ category: "Legacy Config", check: `${label}.allow/alsoAllow`, status: "warn",
         message: `${label} sets both allow and alsoAllow — doctor can merge safe conflicts; otherwise review the permission policy manually`,
