@@ -56,7 +56,7 @@ describe("auditHookEvents", () => {
     expect(auditHookEvents(config).every(r => r.status !== "fail")).toBe(true);
   });
 
-  it("recognises every key in the v2026.9.4 KNOWN_INTERNAL_HOOK_EVENT_KEYS list", () => {
+  it("recognises every key in the v2026.9.8 KNOWN_INTERNAL_HOOK_EVENT_KEYS list", () => {
     const events = [
       "agent:bootstrap", "command:new", "command:reset", "command:stop",
       "gateway:pre-restart", "gateway:shutdown", "gateway:startup",

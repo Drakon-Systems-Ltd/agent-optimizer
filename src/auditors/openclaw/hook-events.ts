@@ -1,6 +1,6 @@
 import type { AuditResult, OpenClawConfig } from "../../types.js";
 
-// Known OpenClaw hook events as of v2026.9.4 (source: src/hooks/internal-hook-types.ts
+// Known OpenClaw hook events as of v2026.9.8 (source: src/hooks/internal-hook-types.ts
 // KNOWN_INTERNAL_HOOK_EVENT_KEYS + docs/automation/hooks/event-types.md). Includes
 // deprecated before_agent_start (flagged separately by hooks-deprecations.ts).
 // Note: `gateway:agent` is a commandSource value carried in command:reset context,
