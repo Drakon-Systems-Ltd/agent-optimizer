@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-820-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-839-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 820 tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2.
+**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 839 tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2.
 
 ## Install
 
