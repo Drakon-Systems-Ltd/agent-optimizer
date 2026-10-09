@@ -24,6 +24,7 @@ import {
 } from "./licensing/index.js";
 import type { License, VerifiedLicenseClaims } from "./licensing/index.js";
 import { emitPlanError } from "./utils/cli-json.js";
+import { openPurchasePage, parseBuyTier } from "./utils/buy.js";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
@@ -405,20 +406,22 @@ program
   .command("buy")
   .description("Open the purchase page in your browser")
   .option("--tier <tier>", "Pre-select tier: solo | fleet | lifetime", "fleet")
-  .action(async (opts) => {
-    const url = `https://drakonsystems.com/products/agent-optimizer/buy?tier=${opts.tier}`;
-    printBanner();
-    console.log(chalk.dim("  Opening: ") + chalk.white(url) + "\n");
+  .action((opts: { tier: string }) => {
+    const tier = parseBuyTier(opts.tier);
+    if (tier === null) {
+      console.error(chalk.red("  Invalid tier. Valid tiers: solo, fleet, lifetime.\n"));
+      process.exitCode = 1;
+      return;
+    }
 
-    // Cross-platform browser open
-    const { exec } = await import("child_process");
-    const platform = process.platform;
-    const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
-    exec(`${cmd} "${url}"`, (err) => {
-      if (err) {
+    printBanner();
+    // Argument-vector launch (no shell) from a validated closed-set tier; see src/utils/buy.ts.
+    const url = openPurchasePage(tier, {
+      onError: () => {
         console.log(chalk.dim("  Could not open browser. Visit the URL above manually.\n"));
-      }
+      },
     });
+    console.log(chalk.dim("  Opening: ") + chalk.white(url) + "\n");
   });
 
 // --- Free commands (audit + scan show results, fixes are gated) ---

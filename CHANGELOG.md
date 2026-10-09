@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `agent-optimizer buy --tier` now accepts only `solo`, `fleet` or `lifetime`
+  (default `fleet`). Any other value is refused with exit code 1 before a
+  browser is launched. The purchase page opens through an argument vector
+  (`open`, `xdg-open`, or `rundll32 url.dll,FileProtocolHandler` on Windows)
+  instead of a shell command, so a tier value can no longer reach a shell.
+  Prices, checkout and licensing are unchanged. (#12)
+
 ## [0.16.0]
 
 ### OpenClaw 2026.9.8
