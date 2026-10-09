@@ -1,6 +1,8 @@
 // Docs contract: the root help's `buy` line must list exactly the tier
-// choices the registered `buy --tier` option declares, and the purchase
-// surface (option, URL handler, pricing, signed-tier set) stays unchanged.
+// choices the registered `buy --tier` option declares; the action validates
+// the tier (closed set) before printing or launching anything; the purchase URL
+// is fixed, allowlisted and opened via execFile without a shell (#12); and the
+// commercial surface (pricing, signed-tier set) stays unchanged.
 //
 // Text assertions over source only — no product code, no CLI, no installs.
 // Named *.contract.mjs so Vitest's default *.test/*.spec glob never picks it up.
@@ -16,16 +18,17 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const read = (p) => readFileSync(root + p, "utf8");
 
 const cli = read("src/cli.ts");
+const buy = read("src/utils/buy.ts");
 const stripe = read("src/licensing/stripe.ts");
 const verify = read("src/licensing/verify.ts");
 
 const sortedEq = (a, b, msg) => assert.deepEqual([...a].sort(), [...b].sort(), msg);
 
-// The registered `buy` command, up to its action handler's URL.
+// The registered `buy` command, through the end of its action handler.
 function buyCommand() {
   const start = cli.indexOf('.command("buy")');
   assert.notEqual(start, -1, "src/cli.ts registers no buy command");
-  const end = cli.indexOf("printBanner();", start);
+  const end = cli.indexOf("\n  });\n", start);
   assert.notEqual(end, -1);
   return cli.slice(start, end);
 }
@@ -45,18 +48,35 @@ function rootHelpBuyLine() {
   return { tiers: m[2].split("|"), width: m[1].length + `buy [--tier ${m[2]}]`.length + m[3].length, desc: m[4] };
 }
 
-test("source evidence: buy --tier declares solo|fleet|lifetime, default fleet, no extra validation", () => {
+test("source evidence: buy --tier declares solo|fleet|lifetime, default fleet", () => {
   const { tiers, def } = declaredTiers();
   assert.deepEqual(tiers, ["solo", "fleet", "lifetime"]);
   assert.equal(def, "fleet");
-  assert.doesNotMatch(buyCommand(), /\.choices\(|new Option\(/, "no parser-level choice validation added");
 });
 
-test("source evidence: purchase URL handler is unchanged", () => {
+test("source evidence: the buy action validates the tier before it prints or opens anything", () => {
+  const action = buyCommand();
+  const parse = action.indexOf("parseBuyTier(opts.tier)");
+  assert.notEqual(parse, -1, "buy action does not call parseBuyTier(opts.tier)");
+  const banner = action.indexOf("printBanner();");
+  const open = action.indexOf("openPurchasePage(tier");
+  assert.ok(banner > parse, "printBanner() runs only after tier validation");
+  assert.ok(open > parse, "openPurchasePage() receives the validated tier");
+  assert.match(action.slice(parse, banner), /if \(tier === null\) \{[\s\S]*?process\.exitCode = 1;[\s\S]*?return;/);
+  // The tier never reaches a URL template or a shell from the CLI layer.
+  assert.doesNotMatch(action, /\$\{opts\.tier\}|\bexec\(|execSync\(/);
+});
+
+test("source evidence: purchase URL is fixed, allowlisted and launched without a shell", () => {
+  assert.match(buy, /const PURCHASE_URL = "https:\/\/drakonsystems\.com\/products\/agent-optimizer\/buy";/);
   assert.match(
-    buyCommand(),
-    /const url = `https:\/\/drakonsystems\.com\/products\/agent-optimizer\/buy\?tier=\$\{opts\.tier\}`;/,
+    buy,
+    /const ALLOWED_URL = \/\^https:\\\/\\\/drakonsystems\\\.com\\\/products\\\/agent-optimizer\\\/buy\\\?tier=\(solo\|fleet\|lifetime\)\$\/;/,
   );
+  assert.match(buy, /input === "solo" \|\| input === "fleet" \|\| input === "lifetime"/);
+  assert.match(buy, /execFile\(file, args, \{ shell: false \}, callback\)/);
+  // child_process exec/execSync go through a shell; RegExp#exec (ALLOWED_URL.exec) is fine.
+  assert.doesNotMatch(buy, /(?<![.\w])exec\(|execSync\(|shell: true|import \{[^}]*\bexec\b[^}]*\} from "child_process"/);
 });
 
 test("source evidence: pricing and signed-tier set unchanged and cover every declared tier", () => {
