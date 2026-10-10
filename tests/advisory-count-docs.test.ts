@@ -2,46 +2,48 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
-// Documentation contract: every "N known issues" claim in the README must match
-// the number of objects in the ADVISORIES array. Scans the source text for
-// top-level object literals in the array (skipping strings and comments), so it
-// does not depend on the array being exported or on GHSA ids (not every entry
-// has one).
+// Documentation contract: every "N known issues" claim in the README must equal
+// the number of entries in the ADVISORIES array literal. The array is counted
+// from the TypeScript AST (the compiler is already a devDependency), so it does
+// not depend on the array being exported, on formatting, or on GHSA ids (not
+// every entry has one).
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Bump together with the README when advisories are added or removed.
+const EXPECTED_ADVISORY_COUNT = 72;
+
 function countAdvisories(): number {
-  const src = readFileSync(join(root, "src/auditors/openclaw/security-advisories.ts"), "utf8");
-  const decl = src.indexOf("const ADVISORIES: SecurityAdvisory[] = [");
-  expect(decl).toBeGreaterThanOrEqual(0);
-  let i = src.indexOf("[", src.indexOf("=", decl)) + 1;
-  let depth = 0;
-  let count = 0;
-  for (; i < src.length; i++) {
-    const c = src[i];
-    if (c === '"' || c === "'" || c === "`") {
-      for (i++; src[i] !== c; i++) if (src[i] === "\\") i++;
-    } else if (c === "/" && src[i + 1] === "/") {
-      i = src.indexOf("\n", i);
-    } else if (c === "/" && src[i + 1] === "*") {
-      i = src.indexOf("*/", i) + 1;
-    } else if (c === "{" || c === "[") {
-      if (depth === 0 && c === "{") count++;
-      depth++;
-    } else if (c === "}" || c === "]") {
-      if (depth === 0) break; // closing bracket of ADVISORIES
-      depth--;
+  const file = "src/auditors/openclaw/security-advisories.ts";
+  const source = ts.createSourceFile(file, readFileSync(join(root, file), "utf8"), ts.ScriptTarget.Latest);
+  for (const stmt of source.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || decl.name.text !== "ADVISORIES") continue;
+      const init = decl.initializer;
+      if (!init || !ts.isArrayLiteralExpression(init)) {
+        throw new Error(`${file}: ADVISORIES is not initialised with an array literal`);
+      }
+      const nonObjects = init.elements.filter((e) => !ts.isObjectLiteralExpression(e));
+      if (nonObjects.length > 0) {
+        throw new Error(`${file}: ADVISORIES has ${nonObjects.length} element(s) that are not object literals`);
+      }
+      return init.elements.length;
     }
   }
-  return count;
+  throw new Error(`${file}: no top-level ADVISORIES declaration found`);
 }
 
 describe("advisory count in README", () => {
   it("matches the ADVISORIES array length", () => {
     const count = countAdvisories();
+    expect(count, "ADVISORIES entries vs EXPECTED_ADVISORY_COUNT").toBe(EXPECTED_ADVISORY_COUNT);
+
     const readme = readFileSync(join(root, "README.md"), "utf8");
     const claims = [...readme.matchAll(/(\d+) known issues/g)].map((m) => Number(m[1]));
-    expect(claims.length).toBeGreaterThan(0);
-    expect(claims).toEqual(claims.map(() => count));
+    // The feature table row and the Security Advisories section.
+    expect(claims, "README \"N known issues\" claims").toHaveLength(2);
+    expect(claims, `README claims vs ${count} ADVISORIES entries`).toEqual([count, count]);
   });
 });

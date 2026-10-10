@@ -139,7 +139,7 @@ The free audit shows every issue and the first 3 fix instructions. A license unl
 | **Compaction Engine** | Flags deprecated `compaction.provider: "lossless-claw"` (migrate to `plugins.slots.contextEngine`); warns when `doctor --fix` would refuse auto-migration |
 | **Vision Models** | Validates `agents.defaults.imageModel` + `tools.media.image.models` ref shape (`provider/model`); redundancy between the two knobs |
 | **Hook Events** | Recognises the v2026.9 registry: `session:auto-reset` plus the v2026.6 events `command`, `session:patch`, `gateway:shutdown`, `gateway:pre-restart` and bare event types |
-| **Security Advisories** | Version-aware checks against 71 known issues from v2026.4.12–2026.9.3, every one of the September 2026 GHSA batch keyed by its GHSA id (config.patch bypass, Control UI token disclosure, DOMPurify XSS, SecretRef exposure, Codex per-chat policy, browser CDP DNS pinning, iOS TLS pin enforcement, and more) |
+| **Security Advisories** | Version-aware checks against 72 known issues from v2026.4.12–2026.9.6, every one of the September 2026 GHSA batch keyed by its GHSA id (config.patch bypass, Control UI token disclosure, DOMPurify XSS, SecretRef exposure, Codex per-chat policy, browser CDP DNS pinning, iOS TLS pin enforcement, and more) |
 
 ### Claude Code auditors (new in v0.11.0)
 
@@ -268,7 +268,7 @@ Security
   ✗ Advisory summary: 37 security advisories (17 critical, 20 warnings) — upgrade to v2026.9.3+
 ```
 
-Covers 71 known issues across v2026.4.12 through v2026.9.3, from the config.patch gateway bypass to the September 2026 GitHub Security Advisory batch (every entry carries its GHSA id so you can look it up). The audit also tells you when its advisory data is older than your installed OpenClaw.
+Covers 72 known issues across v2026.4.12 through v2026.9.6, from the config.patch gateway bypass to the September 2026 GitHub Security Advisory batch (every entry carries its GHSA id so you can look it up). The audit also tells you when its advisory data is older than your installed OpenClaw.
 
 ## Licensing
 

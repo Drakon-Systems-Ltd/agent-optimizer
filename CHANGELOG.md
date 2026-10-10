@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- README advisory coverage now reads "72 known issues from v2026.4.12–2026.9.6",
+  including the Rustls advisory fixed in v2026.9.6. The 0.15.0 entry below
+  previously said "72 total"; the table had 71 entries at that release.
+- Added a test that counts the advisory table entries and checks both README
+  "known issues" claims against that count.
+
 ## [0.16.1]
 
 ### Security
