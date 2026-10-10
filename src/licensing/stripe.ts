@@ -55,6 +55,7 @@ export async function createCheckoutSession(
 ): Promise<Stripe.Checkout.Session> {
   return stripe.checkout.sessions.create({
     mode: "payment",
+    adaptive_pricing: { enabled: false },
     customer_email: customerEmail,
     line_items: [
       {
