@@ -1,8 +1,9 @@
 name: CI
 
 # Verification only: install from the lockfile, type-check/build, run the full
-# test suite once. No secrets, no publish, no write permissions. `npm test` is
-# vitest WATCH mode, so the suite is invoked as `npx vitest run`.
+# test suite once, run the standalone docs contracts, build the OpenClaw plugin
+# and check the packed tarball. No secrets, no publish, no write permissions.
+# `npm test` is vitest WATCH mode, so the suite is invoked as `npx vitest run`.
 
 on:
   push:
@@ -29,3 +30,28 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx vitest run
+
+      # *.contract.mjs files are node:test suites outside Vitest's glob.
+      - run: node --test scripts/docs-contract/buy-help-tiers.contract.mjs
+      - run: node --test scripts/docs-contract/contributor-node-toolchain.contract.mjs
+
+      # openclaw-plugin/ has no lockfile and the root lockfile lacks typebox, so
+      # the plugin's devDependencies are installed into openclaw-plugin/ (same as
+      # the ClawHub release workflow). The optional `openclaw` peer is not installed.
+      - name: Install plugin build dependencies
+        working-directory: openclaw-plugin
+        run: npm install --no-audit --no-fund --no-package-lock
+      - run: npm run build:plugin
+
+      # `npm pack` runs prepack (root tsc + plugin bundle) and writes the tarball
+      # to the runner temp dir; it is listed and checked, never published.
+      - name: Pack and verify tarball contents
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/pack"
+          mkdir -p "$dest"
+          npm pack --pack-destination "$dest"
+          shopt -s nullglob
+          tgz=("$dest"/*.tgz)
+          test "${#tgz[@]}" -eq 1
+          node scripts/ci/verify-pack-manifest.mjs "${tgz[0]}"

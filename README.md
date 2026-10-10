@@ -350,7 +350,12 @@ npx tsx src/cli.ts audit               # Run without building
 npm run build                          # Compile TypeScript (tsc)
 npx vitest run                         # Run the test suite once (as CI does)
 npm test                               # Vitest in watch mode
+node --test scripts/docs-contract/*.contract.mjs   # Docs contracts (as CI does)
 ```
+
+CI also installs `openclaw-plugin/`'s build dependencies (it has no lockfile),
+runs `npm run build:plugin`, then `npm pack` into a temp dir and checks the
+tarball with `scripts/ci/verify-pack-manifest.mjs`. Nothing is published.
 
 ## License
 
