@@ -108,7 +108,7 @@ describe("auditSecurityAdvisories", () => {
     const summary = results.find((r) => r.check === "Advisory summary");
     expect(summary?.status).toBe("fail");
     // upgrade target is the newest fixedIn across everything applicable
-    expect(summary?.message).toContain("upgrade to v2026.9.3+");
+    expect(summary?.message).toContain("upgrade to v2026.9.6+");
   });
 
   it("flags only 2026.7.1 advisories for a 2026.6.11 install", () => {
@@ -130,8 +130,8 @@ describe("auditSecurityAdvisories", () => {
     expect(results.some((r) => r.check === "Advisory data currency")).toBe(false);
   });
 
-  it("covers the OpenClaw releases through 2026.9.4", () => {
-    expect(ADVISORY_TABLE_CURRENT).toBe("2026.9.4");
+  it("covers the OpenClaw releases through 2026.9.8", () => {
+    expect(ADVISORY_TABLE_CURRENT).toBe("2026.9.8");
   });
 
   // ── September 2026 GHSA batch (published 2026-09-11) ──────────────────────
@@ -170,7 +170,7 @@ describe("auditSecurityAdvisories", () => {
     ).toBe(true);
     const summary = results.find((r) => r.check === "Advisory summary");
     expect(summary?.status).toBe("fail");
-    expect(summary?.message).toContain("2026.9.3");
+    expect(summary?.message).toContain("2026.9.6");
   });
 
   it("flags only 2026.8.2+ advisories for a 2026.8.1 install", () => {
@@ -191,14 +191,14 @@ describe("auditSecurityAdvisories", () => {
     expect(
       results.some((r) => r.check === "Prometheus diagnostics operator.read (GHSA-rx8p-qcpv-c7vr)" && r.status === "warn")
     ).toBe(true);
-    const applicable = results.filter((r) => r.check.includes("GHSA-"));
+    const applicable = results.filter((r) => r.check.includes("GHSA-") && !r.check.includes("GHSA-2mjx-qc3c-rqvc"));
     expect(applicable).toHaveLength(4);
   });
 
   it("flags only the 2026.9.3 advisories for a 2026.8.11 install", () => {
     const results = auditSecurityAdvisories("2026.8.11");
     expect(results.some((r) => r.check === "iOS Control UI TLS pin enforcement (GHSA-jjpc-p3xf-8g7p)")).toBe(false);
-    const applicable = results.filter((r) => r.check.includes("GHSA-"));
+    const applicable = results.filter((r) => r.check.includes("GHSA-") && !r.check.includes("GHSA-2mjx-qc3c-rqvc"));
     expect(applicable.map((r) => r.check).sort()).toEqual([
       "Discord asset upload media policy (GHSA-xvwp-wmh2-fq48)",
       "Prometheus diagnostics operator.read (GHSA-rx8p-qcpv-c7vr)",
@@ -207,8 +207,13 @@ describe("auditSecurityAdvisories", () => {
     expect(summary?.status).toBe("warn");
   });
 
-  it("is clean on 2026.9.3 and 2026.9.4", () => {
-    for (const v of ["2026.9.3", "2026.9.4"]) {
+  it("flags the Rustls GHSA before the 2026.9.6 fix", () => {
+    const results = auditSecurityAdvisories("2026.9.5");
+    expect(results.some((r) => r.check === "GHSA-2mjx-qc3c-rqvc (Rustls)" && r.status === "warn")).toBe(true);
+  });
+
+  it("is clean on every release from 2026.9.6 through 2026.9.8", () => {
+    for (const v of ["2026.9.6", "2026.9.7", "2026.9.8"]) {
       const results = auditSecurityAdvisories(v);
       expect(results.some((r) => r.check === "Security advisories" && r.status === "pass")).toBe(true);
       expect(results.some((r) => r.check === "Advisory summary")).toBe(false);
@@ -218,7 +223,7 @@ describe("auditSecurityAdvisories", () => {
 
   it("includes the GHSA id in every September-batch check name", () => {
     const results = auditSecurityAdvisories("2026.6.11");
-    const sept = results.filter((r) => r.check.includes("GHSA-") && r.check !== "DOMPurify XSS (GHSA-cmwh-pvxp-8882)");
+    const sept = results.filter((r) => r.check.includes("GHSA-") && r.check !== "DOMPurify XSS (GHSA-cmwh-pvxp-8882)" && !r.check.includes("GHSA-2mjx-qc3c-rqvc"));
     expect(sept.length).toBe(30);
     for (const r of sept) {
       expect(r.check).toMatch(/\(GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}\)$/);

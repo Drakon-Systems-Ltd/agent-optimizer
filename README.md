@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-607-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-839-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,14 +11,14 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 760+ tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.4 and Hermes Agent 0.21.2.
+**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 839 tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2.
 
 ## Install
 
 Works on macOS, Linux, and Windows. Requires Node.js 20+.
 
-Version 0.15.1 requires a verified, signed license for paid features; unsigned
-or edited license files no longer unlock them. Existing genuine licenses from
+Since version 0.15.1, paid features require a verified, signed license; unsigned
+or edited license files do not unlock them. Existing genuine licenses from
 drakonsystems.com continue to work.
 
 ```bash
@@ -321,8 +321,8 @@ Memory Search
   ✓ Dreaming enabled (schedule: 0 3 * * *)
 
 Security
-  ✓ OpenClaw version: Detected OpenClaw 2026.9.4
-  ✓ No known security advisories for this version (advisory data current to v2026.9.4)
+  ✓ OpenClaw version: Detected OpenClaw 2026.9.8
+  ✓ No known security advisories for this version (advisory data current to v2026.9.8)
 
 Channel Security
   ⚠ No default DM policy set
@@ -337,11 +337,19 @@ Channel Security
 
 ## Development
 
+Use **Node.js 22 (22.12 or later)** to work on this repo — CI runs Node 22.
+The published package still supports Node 20+ at runtime (`engines`), but the
+locked dev toolchain is stricter: Vite/Rolldown (pulled in by Vitest 4) need
+`^20.19.0 || >=22.12.0`, and Vitest needs `^20.0.0 || ^22.0.0 || >=24.0.0`.
+That leaves `^20.19.0 || ^22.12.0 || >=24.0.0`; older Node 20 minors and
+Node 23 are outside it. Only Node 22 is exercised by CI.
+
 ```bash
-npm install
-npx tsx src/cli.ts audit              # Run without building
-npm run build                          # Compile TypeScript
-npm test                               # Run tests (761 passing)
+npm ci                                 # Install from the lockfile (as CI does)
+npx tsx src/cli.ts audit               # Run without building
+npm run build                          # Compile TypeScript (tsc)
+npx vitest run                         # Run the test suite once (as CI does)
+npm test                               # Vitest in watch mode
 ```
 
 ## License

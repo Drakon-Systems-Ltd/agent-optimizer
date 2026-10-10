@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1]
+
+### Security
+
+- `agent-optimizer buy --tier` now accepts only `solo`, `fleet` or `lifetime`
+  (default `fleet`). Any other value is refused with exit code 1 before a
+  browser is launched. The purchase page opens through an argument vector
+  (`open`, `xdg-open`, or `rundll32 url.dll,FileProtocolHandler` on Windows)
+  instead of a shell command, so a tier value can no longer reach a shell.
+  Prices, checkout and licensing are unchanged. (#12)
+
+## [0.16.0]
+
+### OpenClaw 2026.9.8
+
+- Updated the declared OpenClaw target, bundled plugin build target, and
+  security advisory currency through v2026.9.8. Added the Rustls
+  GHSA-2mjx-qc3c-rqvc fix shipped with OpenClaw v2026.9.6.
+- Added Legacy Config findings for Code Mode languages/runtime (global and
+  per-agent), Tool Search code mode/timeout, the retired GitHub Copilot
+  discovery switch, removed `silentReply.internal` (defaults and surfaces) and
+  `surfaces.*.silentReply.direct`, and tool policies that set both
+  allow/alsoAllow to nonempty string lists outside sandbox scopes. Code Mode
+  languages/runtime findings use key presence, including null values; runtime
+  values other than quickjs-wasi are reported, though doctor only migrates
+  quickjs-wasi automatically.
+- Confirmed that OpenClaw's internal hook event list and web-search legacy
+  provider key list have identical source objects in v2026.9.4 and v2026.9.8.
+
+### Documentation
+
+- README "Development" now states the Node.js range the locked dev toolchain
+  needs (`^20.19.0 || ^22.12.0 || >=24.0.0`, Node 22 recommended to match CI),
+  separate from runtime support (still Node 20+), and gives `npx vitest run`
+  as the one-shot test command (`npm test` is watch mode).
+- Root `--help` now lists `lifetime` alongside `solo` and `fleet` for
+  `buy --tier`, matching the tiers the command already accepts.
+
 ## [0.15.1]
 
 ### Security
