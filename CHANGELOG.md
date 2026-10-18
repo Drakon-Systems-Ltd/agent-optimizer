@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2]
+
 ### Fixed
 
 - The OpenClaw legacy-config audit now flags a GitHub Copilot
   `discovery.enabled` switch whenever the key is present, including an explicit
   `null`, matching OpenClaw's own migration. Previously a `null` value produced
   no retirement advice (#19).
+
+### Changed
+
+- New releases are published to npm automatically from GitHub Actions when the
+  GitHub release is published, using npm trusted publishing (no stored npm
+  token). The workflow runs the same build, test and package checks as CI and
+  publishes the exact tarball it checked (#20).
 
 ### Documentation
 
