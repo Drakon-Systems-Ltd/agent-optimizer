@@ -42,7 +42,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${RELEASE_TAG:-}" ]; then tag="$RELEASE_TAG"; else tag="v${INPUT_VERSION#v}"; fi
-          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+          # Whole-string match (bash [[ =~ ]]), so a multi-line value can't pass.
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Refusing: '$tag' is not a v<semver> tag." >&2
             exit 1
           fi
@@ -107,6 +108,8 @@ jobs:
       - if: steps.exists.outputs.skip == 'false'
         name: Pack and verify tarball contents
         id: pack
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           dest="$RUNNER_TEMP/pack"
@@ -115,12 +118,18 @@ jobs:
           shopt -s nullglob
           tgz=("$dest"/*.tgz)
           test "${#tgz[@]}" -eq 1
-          tar -tzf "${tgz[0]}" | grep -qx 'package/dist/cli.js'
-          tar -tzf "${tgz[0]}" | grep -qx 'package/openclaw-plugin/openclaw.plugin.json'
+          # Read the whole listing first: grep -q on a pipe can SIGPIPE tar under pipefail.
+          listing=$(tar -tzf "${tgz[0]}")
+          grep -qx 'package/dist/cli.js' <<<"$listing"
+          grep -qx 'package/openclaw-plugin/openclaw.plugin.json' <<<"$listing"
           if [ -f scripts/ci/verify-pack-manifest.mjs ]; then
             node scripts/ci/verify-pack-manifest.mjs "${tgz[0]}"
+          elif [ "$TAG" = "v0.16.1" ]; then
+            # The only tag cut before the verifier existed that still needs npm (backfill).
+            echo "verify-pack-manifest.mjs is absent at $TAG (pre-verifier backfill); basic artefact checks only"
           else
-            echo "verify-pack-manifest.mjs not present at this tag; basic artefact checks only"
+            echo "Refusing: scripts/ci/verify-pack-manifest.mjs missing at $TAG" >&2
+            exit 1
           fi
           echo "tgz=${tgz[0]}" >> "$GITHUB_OUTPUT"
 
