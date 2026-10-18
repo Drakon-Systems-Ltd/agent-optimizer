@@ -56,6 +56,9 @@ interface LegacyPathRule {
   message: string;
   fix?: string;
   match?: (value: unknown) => boolean;
+  // Flag on own-key presence of the last segment, null included (upstream
+  // removes these with an Object.hasOwn check). `match` is ignored.
+  ownKey?: boolean;
 }
 
 const doctorFix = "Run: openclaw doctor --fix (migrates legacy keys in place)";
@@ -284,6 +287,8 @@ const LEGACY_PATH_RULES: LegacyPathRule[] = [
     path: ["plugins", "entries", "github-copilot", "config", "discovery", "enabled"],
     check: "plugins.entries.github-copilot.config.discovery.enabled",
     message: "GitHub Copilot discovery.enabled is retired — discovery now refreshes automatically; use agents.defaults.modelPolicy.allow to hide models",
+    // OpenClaw removeLegacyCopilotDiscovery: Object.hasOwn(discovery, "enabled"), any value.
+    ownKey: true,
   },
   {
     path: ["plugins", "entries", "github-copilot", "config", "discovery"],
@@ -297,6 +302,10 @@ const LEGACY_PATH_RULES: LegacyPathRule[] = [
     message: "agents.defaults.silentReply.internal was removed — only channel groups may use NO_REPLY",
   },
 ];
+
+function hasOwnKey(record: unknown, key: string): boolean {
+  return !!record && typeof record === "object" && !Array.isArray(record) && Object.hasOwn(record, key);
+}
 
 function getPath(root: unknown, path: string[]): unknown {
   let cur: unknown = root;
@@ -406,9 +415,14 @@ export function auditLegacyConfigKeys(config: OpenClawConfig): AuditResult[] {
   }
 
   for (const rule of LEGACY_PATH_RULES) {
-    const value = getPath(config, rule.path);
-    if (value === undefined || value === null) continue;
-    if (rule.match && !rule.match(value)) continue;
+    if (rule.ownKey) {
+      const parent = getPath(config, rule.path.slice(0, -1));
+      if (!hasOwnKey(parent, rule.path[rule.path.length - 1])) continue;
+    } else {
+      const value = getPath(config, rule.path);
+      if (value === undefined || value === null) continue;
+      if (rule.match && !rule.match(value)) continue;
+    }
     results.push({
       category: "Legacy Config",
       check: rule.check,

@@ -309,6 +309,53 @@ describe("auditLegacyConfigKeys", () => {
     expect(auditLegacyConfigKeys(emptyBlock).some((r) => r.check === "plugins.entries.github-copilot.config.discovery")).toBe(true);
   });
 
+  describe("Copilot discovery.enabled own-key presence (#19)", () => {
+    const ENABLED = "plugins.entries.github-copilot.config.discovery.enabled";
+    const EMPTY = "plugins.entries.github-copilot.config.discovery";
+    const checksFor = (discovery: unknown): string[] =>
+      auditLegacyConfigKeys({ plugins: { entries: { "github-copilot": { config: { discovery } } } } } as unknown as OpenClawConfig)
+        .map((r) => r.check);
+
+    it.each([
+      ["null", null],
+      ["false", false],
+      ["true", true],
+      ["a malformed string", "yes"],
+      ["a malformed object", { mode: "auto" }],
+      ["a malformed array", []],
+      ["a number", 0],
+    ])("flags a present enabled key holding %s", (_label, enabled) => {
+      const checks = checksFor({ enabled });
+      expect(checks).toContain(ENABLED);
+      // The block is not empty, so the empty-block rule stays silent.
+      expect(checks).not.toContain(EMPTY);
+    });
+
+    it("keeps the empty-discovery rule and does not invent the enabled finding", () => {
+      const checks = checksFor({});
+      expect(checks).toContain(EMPTY);
+      expect(checks).not.toContain(ENABLED);
+    });
+
+    it("leaves a non-empty discovery block without enabled alone", () => {
+      expect(checksFor({ refreshIntervalMs: 60000 })).toEqual([]);
+    });
+
+    it("ignores an inherited enabled key and non-object discovery values", () => {
+      expect(checksFor(Object.create({ enabled: null }))).not.toContain(ENABLED);
+      expect(checksFor(null)).toEqual([]);
+      expect(checksFor(["enabled"])).toEqual([]);
+      expect(checksFor("enabled")).toEqual([]);
+    });
+
+    it("parses a JSON config with an explicit null switch", () => {
+      const config = JSON.parse('{"plugins":{"entries":{"github-copilot":{"config":{"discovery":{"enabled":null}}}}}}') as OpenClawConfig;
+      const results = auditLegacyConfigKeys(config).filter((r) => r.check === ENABLED);
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe("warn");
+    });
+  });
+
   it("flags per-agent Code Mode keys on an agents.list roster", () => {
     const config = { agents: { list: [{ id: "a", tools: { codeMode: { languages: ["javascript"], runtime: "quickjs-wasi" } } }] } } as unknown as OpenClawConfig;
     const checks = auditLegacyConfigKeys(config).map((r) => r.check);
