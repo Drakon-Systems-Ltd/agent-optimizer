@@ -1,0 +1,90 @@
+name: npm publish
+
+# Publishes @drakon-systems/agent-optimizer to npm with npm trusted publishing
+# (OIDC): no stored npm token. npm's trusted publisher for this package names
+# this workflow file (npm-publish.yml) with no environment, so keep the filename.
+#
+# Runs on a published GitHub release, or by hand (workflow_dispatch) with a
+# version, which checks out the tag v<version>. That is how older releases
+# whose tags predate this file get published. Idempotent: a version npm already
+# has is skipped, not failed.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.16.1). The tag v<version> must exist."
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${RELEASE_TAG:-}" ]; then tag="$RELEASE_TAG"; else tag="v${INPUT_VERSION#v}"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@^11.5.1 && npm --version
+
+      - name: Tag must match package.json version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: test "v$(node -p "require('./package.json').version")" = "$TAG"
+
+      - name: Skip if this version is already on npm
+        id: exists
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on npm; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm ci
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm run build
+      - if: steps.exists.outputs.skip == 'false'
+        run: npx vitest run
+
+      # Same as CI: openclaw-plugin/ has no lockfile, so its build deps are
+      # installed in place. prepack (run by npm publish) builds both.
+      - if: steps.exists.outputs.skip == 'false'
+        name: Install plugin build dependencies
+        working-directory: openclaw-plugin
+        run: npm install --no-audit --no-fund --no-package-lock
+
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm publish --access public
