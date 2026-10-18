@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The OpenClaw legacy-config audit now flags a GitHub Copilot
+  `discovery.enabled` switch whenever the key is present, including an explicit
+  `null`, matching OpenClaw's own migration. Previously a `null` value produced
+  no retirement advice (#19).
+
 ### Documentation
 
 - README advisory coverage now reads "72 known issues from v2026.4.12–2026.9.6",
