@@ -8,6 +8,9 @@ name: npm publish
 # version, which checks out the tag v<version>. That is how older releases
 # whose tags predate this file get published. Idempotent: a version npm already
 # has is skipped, not failed.
+#
+# Gates mirror ci.yml (build, vitest, docs contracts, plugin build, pack +
+# manifest check), and the exact tarball that was checked is the one published.
 
 on:
   release:
@@ -31,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Resolve tag
+      - name: Resolve and validate tag
         id: tag
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -39,11 +42,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${RELEASE_TAG:-}" ]; then tag="$RELEASE_TAG"; else tag="v${INPUT_VERSION#v}"; fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Refusing: '$tag' is not a v<semver> tag." >&2
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v5
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
           persist-credentials: false
 
       - uses: actions/setup-node@v5
@@ -72,6 +79,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # --- same gates as ci.yml ---
       - if: steps.exists.outputs.skip == 'false'
         run: npm ci
       - if: steps.exists.outputs.skip == 'false'
@@ -79,12 +87,44 @@ jobs:
       - if: steps.exists.outputs.skip == 'false'
         run: npx vitest run
 
-      # Same as CI: openclaw-plugin/ has no lockfile, so its build deps are
-      # installed in place. prepack (run by npm publish) builds both.
+      - if: steps.exists.outputs.skip == 'false'
+        name: Docs contracts (node:test, outside Vitest's glob)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          contracts=(scripts/docs-contract/*.contract.mjs)
+          if [ "${#contracts[@]}" -gt 0 ]; then node --test "${contracts[@]}"; else echo "no docs contracts at this tag"; fi
+
+      # openclaw-plugin/ has no lockfile, so its build deps are installed in place.
       - if: steps.exists.outputs.skip == 'false'
         name: Install plugin build dependencies
         working-directory: openclaw-plugin
         run: npm install --no-audit --no-fund --no-package-lock
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm run build:plugin
+
+      # Pack once (prepack builds root + plugin), check the tarball, publish that file.
+      - if: steps.exists.outputs.skip == 'false'
+        name: Pack and verify tarball contents
+        id: pack
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/pack"
+          mkdir -p "$dest"
+          npm pack --pack-destination "$dest"
+          shopt -s nullglob
+          tgz=("$dest"/*.tgz)
+          test "${#tgz[@]}" -eq 1
+          tar -tzf "${tgz[0]}" | grep -qx 'package/dist/cli.js'
+          tar -tzf "${tgz[0]}" | grep -qx 'package/openclaw-plugin/openclaw.plugin.json'
+          if [ -f scripts/ci/verify-pack-manifest.mjs ]; then
+            node scripts/ci/verify-pack-manifest.mjs "${tgz[0]}"
+          else
+            echo "verify-pack-manifest.mjs not present at this tag; basic artefact checks only"
+          fi
+          echo "tgz=${tgz[0]}" >> "$GITHUB_OUTPUT"
 
       - if: steps.exists.outputs.skip == 'false'
-        run: npm publish --access public
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: npm publish "$TGZ" --access public
