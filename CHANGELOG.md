@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+
+- Clarify command-triggered network use in the README, including opt-in monitoring payloads, scheduling and disable instructions; add a source-parsed monitor command documentation regression test.
+
 ## [0.16.2]
 
 ### Fixed
