@@ -2,11 +2,12 @@
 name: agent-optimizer
 description: >
   CLI tool that audits Claude Code, OpenClaw, and Hermes Agent config files for
-  misconfigurations, token waste, security issues, and stale auth. Reads local
-  JSON/Markdown config files only. No data leaves the machine unless you
-  explicitly enroll in optional daily monitoring (summary counts only — see
-  Data & Network Disclosure). No API keys required. Other network calls:
-  one-time license activation and npm update check.
+  misconfigurations, token waste, security issues, and stale auth. Audit, scan,
+  and optimize make no network calls. No API keys required. Network use is
+  command-triggered: license activation (including reactivation), update queries
+  to the configured npm registry and a global npm install if versions differ,
+  optional monitor enroll/run/disable POSTs, buy opening the purchase page in
+  your browser, and fleet SSH reads — see Data & Network Disclosure.
 license: SEE LICENSE IN LICENSE.md
 metadata:
   author: Drakon Systems
@@ -50,9 +51,11 @@ metadata:
       - ~/.claude.json (MCP server config)
       - ~/.claude/CLAUDE.md and project CLAUDE.md
     network:
-      - "One-time HTTPS call to drakonsystems.com/api/agent-optimizer/activate on license activation only"
-      - "HTTPS call to registry.npmjs.org on agent-optimizer update only"
-      - "Optional monitoring (opt-in via `monitor enroll`): daily HTTPS POST of summary counts to drakonsystems.com/api/agent-optimizer/monitor/ping — see Data & Network Disclosure"
+      - "HTTPS POST to drakonsystems.com/api/agent-optimizer/activate per activation, including reactivation"
+      - "agent-optimizer update queries the configured npm registry and runs a global npm install if versions differ"
+      - "Optional monitoring (opt-in): monitor enroll, monitor run (manual or cron), and monitor disable POST to the monitoring server (default https://drakonsystems.com); disable attempts to notify it (best-effort) — see Data & Network Disclosure"
+      - "buy opens the purchase page in your browser; the browser handles the network request"
+      - "fleet --hosts connects over SSH to the hosts you specify"
       - "No telemetry, no analytics, no phone-home during audit/scan/optimize"
     data_handling:
       - "All analysis is local — no config data, finding text, or file contents leave the machine; opt-in monitoring sends summary counts and check names only"
@@ -71,8 +74,8 @@ install:
     needed. The free audit reads OpenClaw and Claude Code config files to check
     for misconfigurations. Security scan reads skills/, hooks/, and extensions/
     directories for suspicious patterns (billing, injection, obfuscation).
-    Nothing is transmitted off-machine unless you explicitly enroll in
-    optional monitoring (summary counts only).
+    Audit, scan, and optimize make no network calls. Other command-triggered
+    network use is listed in Data & Network Disclosure.
 ---
 
 # Agent Optimizer by Drakon Systems
@@ -86,7 +89,7 @@ Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2 (named profiles under `~/.
 
 **Reads (local files only):**
 - `~/.openclaw/openclaw.json` — model config, heartbeat, compaction, plugins
-- `~/.openclaw/agents/*/agent/auth-profiles.json` — token expiry checks (does NOT extract or transmit keys)
+- `~/.openclaw/agents/*/agent/auth-profiles.json` — token expiry and duplicate-key checks (does NOT transmit keys)
 - `~/.openclaw/agents/*/agent/models.json` — legacy override detection
 - `~/.openclaw/cron/jobs.json`, `~/.openclaw/exec-approvals.json` — stale dreaming jobs, old exec approvals
 - OpenClaw workspace `skills/`, `hooks/`, `extensions/` — pattern-matched for billing/injection/obfuscation signatures
@@ -95,7 +98,7 @@ Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2 (named profiles under `~/.
 - Claude Code `~/.claude/CLAUDE.md` + project `CLAUDE.md` — memory-file size and import checks
 
 **Does NOT:**
-- Send any data off-machine during audit/scan/optimize (no telemetry, no analytics; the only off-machine sends are `activate`, `update`, and — if you explicitly enroll — the optional monitoring summary described below)
+- Send any data off-machine during audit/scan/optimize (no telemetry, no analytics; other command-triggered network use is listed in Data & Network Disclosure)
 - Store or prompt for API keys, SSH keys, or provider credentials
 - Modify any files unless `audit --fix` or `optimize` is run with a license (writes go through a transactional engine — multi-generation backups under `~/.agent-optimizer/backups/`, post-apply verification, and auto-rollback if the change would break the config)
 - Write to Claude Code config — `settings.json` findings are surfaced as recommendations, never auto-applied
@@ -107,41 +110,58 @@ The `fleet --hosts` command runs `cat ~/.openclaw/openclaw.json` over SSH on eac
 ## Data & Network Disclosure
 
 **Local files read (never transmitted):** the OpenClaw and Claude Code config
-paths listed under `config_paths` above. Auth profiles are read only to check
-token *expiry timestamps* — key and token **values** are never extracted,
-logged, or transmitted.
+paths listed under `config_paths` above. Auth profiles are inspected locally for
+expiry, duplicate keys, and provider coverage — key and token **values** are
+not logged or transmitted by the audit.
 
 **Local files written:** `~/.agent-optimizer/` only — `license.json`,
 `plans/`, `backups/`, `snapshots/`, and (if monitoring is enabled)
 `monitor.json` + `monitor.log`. OpenClaw config is written only via the
 transactional apply engine; Claude Code config is never written.
 
-**Network calls, complete list:**
+**Network calls, complete CLI list:**
 
-1. **License activation** — one-time POST to
-   `drakonsystems.com/api/agent-optimizer/activate` when you run `activate <key>`.
-   Sends the key and purchase email.
-2. **Update check** — `registry.npmjs.org`, only when you run `update`.
+1. **License activation** — POST to
+   `https://drakonsystems.com/api/agent-optimizer/activate` per invocation of
+   `activate <key>` with a valid key format. Sends the key and optional purchase email.
+   License verification is local; reactivation makes another request.
+2. **Update** — `update` queries the configured npm registry for the latest
+   version and runs a global npm install when that version differs from the installed one
+   (`npm install -g @drakon-systems/agent-optimizer@latest`).
 3. **Optional monitoring (opt-in, off by default)** — enabled *only* if you run
    `agent-optimizer monitor enroll <email>`. Enrolling:
-   - registers with `drakonsystems.com/api/agent-optimizer/monitor/enroll`
+   - POSTs to `https://drakonsystems.com/api/agent-optimizer/monitor/enroll`
      (sends your email, an agent name defaulting to hostname, and OpenClaw version);
-   - installs a user crontab entry (`0 2 * * * agent-optimizer monitor run`,
-     tagged `# agent-optimizer monitor`) that runs the audit daily and POSTs a
-     summary to `drakonsystems.com/api/agent-optimizer/monitor/ping`;
+   - attempts to install a user crontab entry (`0 2 * * * agent-optimizer monitor run`,
+     tagged `# agent-optimizer monitor`) that runs the audit daily;
    - the server sends a weekly email digest (Sunday 18:00 UTC).
 
-   The daily payload contains **only**: enrollment token, timestamp, OpenClaw
-   version, a computed health score, pass/warn/fail/info counts, and per-check
+   After enrollment, `monitor run` (manually or by the installed cron) POSTs a
+   summary to `https://drakonsystems.com/api/agent-optimizer/monitor/ping`.
+   Scheduled pings start only after enrollment and successful cron installation.
+   The payload contains **only**: enrollment token, timestamp, OpenClaw
+   version, a computed health score, pass/warn/fail/info/total counts, and per-check
    `{category, check-name, status}` triples. It never includes finding message
-   text, config values, file contents, or file paths. Preview the exact payload
-   any time with `agent-optimizer monitor test` (dry-run, no POST).
-   **Disable:** `agent-optimizer monitor disable` — removes the cron entry,
-   deletes `~/.agent-optimizer/monitor.json`, and notifies the server.
-   The endpoint can be redirected with `AGENT_OPTIMIZER_API_BASE`.
+   text, config values, file contents, or file paths. Preview a redacted payload
+   summary any time with `agent-optimizer monitor test` (dry-run, no POST).
+   **Disable:** `agent-optimizer monitor disable` — when enrolled, attempts to notify
+   the server via POST to `https://drakonsystems.com/api/agent-optimizer/monitor/disable`
+   with the enrollment token, then removes the cron entry and deletes
+   `~/.agent-optimizer/monitor.json`. Notification is best-effort; local cleanup
+   still proceeds if the request fails.
+   These monitoring endpoints default to `https://drakonsystems.com`;
+   `AGENT_OPTIMIZER_API_BASE` overrides the base at enrollment, which is saved
+   locally for subsequent run/disable requests.
+4. **Buy** — `buy` opens the purchase page in your browser with the selected tier
+   (`https://drakonsystems.com/products/agent-optimizer/buy?tier=<tier>`);
+   the browser handles the network request.
+5. **Fleet SSH** — `fleet --hosts <hosts>` connects to the hosts you specify to
+   read OpenClaw config and model overrides and check gateway service status.
 
-**Never sent under any feature or tier:** API keys, OAuth tokens, SSH keys,
-credential values of any kind, config file contents, or audit finding text.
+**Never sent to licensing or monitoring servers:** API keys, OAuth tokens, SSH keys,
+provider credential values, config file contents, or audit finding text.
+The license key and monitoring enrollment token are sent as described above.
+Fleet SSH reads remote config files over SSH; it does not upload them to those servers.
 Audit, scan, and optimize make no network calls at all.
 
 ## Quick Start
