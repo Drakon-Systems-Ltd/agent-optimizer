@@ -70,6 +70,27 @@ agent-optimizer buy                                # Open purchase page in brows
 agent-optimizer buy --tier solo                    # Pre-select Solo tier
 ```
 
+### Monitoring (free beta)
+
+Daily monitoring is opt-in, with a weekly email digest. Enrolment requires macOS or Linux with `crontab` available; it saves local state and installs a daily `monitor run` cron at 02:00 in the cron timezone. No background monitoring runs unless you enrol and install this cron (enrolment attempts installation automatically).
+
+```bash
+agent-optimizer monitor enroll <email> --name <name> # Enrol; name defaults to hostname
+agent-optimizer monitor run                         # Audit and POST a ping (also called by cron)
+agent-optimizer monitor status                      # Show local enrolment and cron status; no POST
+agent-optimizer monitor test                        # Preview the audit payload; no POST
+agent-optimizer monitor disable                     # Notify server, remove cron and local state
+agent-optimizer monitor install-cron                # Recover a missing cron after enrolment; no POST
+```
+
+`enroll`, `run`, and `test` accept `-c, --config <path>` (default `~/.openclaw/openclaw.json`). The installed cron uses the default path, not an enrolment-time `--config` override. If cron installation fails after enrolment, use `monitor install-cron` to recover or `monitor run` manually.
+
+Monitoring POSTs go to `https://drakonsystems.com` by default (`AGENT_OPTIMIZER_API_BASE` can override this at enrolment; the server address is saved locally):
+
+- `/api/agent-optimizer/monitor/enroll` registers enrolment with `email`, `agentName` (the supplied name or hostname), and `openclawVersion` (or `unknown`).
+- `/api/agent-optimizer/monitor/ping` sends the audit result when `monitor run` is invoked after enrolment: `token`, `timestamp`, `openclawVersion`, `healthScore`, `summary` containing `pass`, `warn`, `fail`, `info`, `total`, and `issues` containing `category`, `check`, `status` for every result. It does not send full config files, finding messages or fix text.
+- `/api/agent-optimizer/monitor/disable` sends `token` to disable monitoring on the server (best-effort), then removes the local cron and enrolment state. Run `agent-optimizer monitor disable` to stop monitoring; local cleanup still proceeds if the server request fails.
+
 ### Licensed Commands (Solo £29+)
 
 ```bash
@@ -280,7 +301,13 @@ agent-optimizer deactivate                         # Remove
 
 Purchase at [drakonsystems.com/products/agent-optimizer](https://drakonsystems.com/products/agent-optimizer).
 
-Licenses are RSA-signed and verified offline — no phone-home, no telemetry, no account required. The only network call is the one-time activation.
+Licenses are RSA-signed and verified offline; no account is required. Network use is command-triggered:
+
+- `activate <key>` makes one POST to `https://drakonsystems.com/api/agent-optimizer/activate` per invocation, sending the key and optional email to obtain a signed license. Subsequent license verification is local; reactivation makes another request.
+- Opt-in `monitor enroll`, `monitor run`, and `monitor disable` POST to the monitoring server (details above). Scheduled pings start only after you enrol and a monitoring cron is installed.
+- `update` queries the configured npm registry for the latest version and runs a global npm install when that version differs from the installed one.
+- `buy` opens the Drakon purchase page in your browser with the selected tier; the browser handles the network request.
+- `fleet --hosts <hosts>` connects over SSH to the hosts you specify to read OpenClaw config and model overrides and check gateway service status.
 
 Every licensed command requires the server-issued RS256 token in `~/.agent-optimizer/license.json` to verify against the public key embedded in the CLI. Tier and expiry come from the signed token; the readable `data` fields beside it can never grant more. Their `tier` and `email` must match the signed claims, and their `expiresAt` can only shorten validity, never extend it past the signed expiry. Editing tier or email (or removing the token) makes the license invalid rather than upgrading it. If `agent-optimizer license` reports an invalid signature for a key you bought, run `agent-optimizer activate <key>` again to fetch a fresh signed license.
 
