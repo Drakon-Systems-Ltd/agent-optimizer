@@ -279,8 +279,8 @@ written.
 
 | Tier | Price | Key Features |
 |------|-------|-------------|
-| Free | £0 | Full audit, first 3 fix instructions, scan, preview |
-| Solo | £29 | All fixes unlocked, `audit --fix` auto-apply, optimize profiles |
+| Free | £0 | Full audit with every fix instruction, scan, preview |
+| Solo | £29 | `audit --fix` auto-apply, optimize profiles |
 | Fleet | £79 | SSH fleet audit, per-host comparison |
 | Lifetime | £149 | Everything + 12mo updates + priority support |
 

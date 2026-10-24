@@ -64,6 +64,7 @@ agent-optimizer optimize --dry-run --profile aggressive  # Preview aggressive pr
 agent-optimizer drift --name golden                # Compare config against snapshot
 agent-optimizer snapshot save --name golden        # Save config baseline
 agent-optimizer snapshot list                      # List saved snapshots
+agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer license                            # Show license status
 agent-optimizer update                             # Check for updates
 agent-optimizer buy                                # Open purchase page in browser
@@ -101,7 +102,6 @@ agent-optimizer optimize --profile aggressive      # Maximum token savings
 agent-optimizer optimize --only heartbeat          # Fix only heartbeat
 agent-optimizer optimize --only context,pruning    # Fix specific areas
 agent-optimizer optimize --skip subagents          # Fix everything except subagents
-agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer activate AO-XXXX-XXXXXXXX-XXXXXXXX # Activate license
 agent-optimizer deactivate                         # Remove license
 ```
@@ -117,7 +117,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` (70+ checks) | Results + 3 fixes | All fixes | All fixes | All fixes |
+| `audit` (70+ checks) | All fix instructions | All fix instructions | All fix instructions | All fix instructions |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
 | `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
@@ -125,11 +125,11 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 | `drift` | Full results | Full results | Full results | Full results |
 | `snapshot` | Save & list | Save & list | Save & list | Save & list |
 | `fleet --hosts` | - | - | SSH fleet audit | SSH fleet audit |
-| `rollback` | - | Yes | Yes | Yes |
+| `rollback` | Yes | Yes | Yes | Yes |
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
-The free audit shows every issue and the first 3 fix instructions. A license unlocks all fix instructions, auto-fix, and optimization profiles.
+The free audit shows every issue and every fix instruction. A license lets the CLI apply fixes for you (`audit --fix`, `optimize`). `rollback` works without a license.
 
 ## What It Audits
 
