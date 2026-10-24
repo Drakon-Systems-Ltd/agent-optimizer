@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Clarify command-triggered network use in the README, including opt-in monitoring payloads, scheduling and disable instructions; add a source-parsed monitor command documentation regression test.
 - Align SKILL.md network disclosures with the CLI and README: configured-registry update queries and global installs, reactivation, monitor run/disable POSTs (disable is best-effort), browser purchases, and fleet SSH; add offline regression tests.
+- Correct the README and SKILL.md pricing notes: every fix instruction is free, and the licence covers applying fixes (`audit --fix`, `optimize`) and `rollback`, matching the 0.14.0 change.
 
 ## [0.16.2]
 

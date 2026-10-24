@@ -117,7 +117,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` (70+ checks) | Results + 3 fixes | All fixes | All fixes | All fixes |
+| `audit` (70+ checks) | All fix instructions | All fix instructions | All fix instructions | All fix instructions |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
 | `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
@@ -129,7 +129,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
-The free audit shows every issue and the first 3 fix instructions. A license unlocks all fix instructions, auto-fix, and optimization profiles.
+The free audit shows every issue and every fix instruction. A license lets the CLI apply fixes for you (`audit --fix`, `optimize`) and enables `rollback`.
 
 ## What It Audits
 
