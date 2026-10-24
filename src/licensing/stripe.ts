@@ -55,6 +55,9 @@ export async function createCheckoutSession(
 ): Promise<Stripe.Checkout.Session> {
   return stripe.checkout.sessions.create({
     mode: "payment",
+    // Charge the catalog price in its own currency (GBP). Adaptive Pricing
+    // would let Stripe convert it to the buyer's local currency (#2).
+    adaptive_pricing: { enabled: false },
     customer_email: customerEmail,
     line_items: [
       {

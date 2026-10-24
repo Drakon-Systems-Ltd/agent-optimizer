@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Stripe checkout helper (`createCheckoutSession`) now turns off Stripe
+  Adaptive Pricing, so a session charges the GBP catalog price (£29, £79,
+  £149) instead of letting Stripe convert it to the buyer's local currency
+  (#2).
 - The OpenClaw legacy-config audit now flags a GitHub Copilot
   `discovery.enabled` switch whenever the key is present, including an explicit
   `null`, matching OpenClaw's own migration. Previously a `null` value produced
