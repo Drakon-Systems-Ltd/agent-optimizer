@@ -64,6 +64,7 @@ agent-optimizer optimize --dry-run --profile aggressive  # Preview aggressive pr
 agent-optimizer drift --name golden                # Compare config against snapshot
 agent-optimizer snapshot save --name golden        # Save config baseline
 agent-optimizer snapshot list                      # List saved snapshots
+agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer license                            # Show license status
 agent-optimizer update                             # Check for updates
 agent-optimizer buy                                # Open purchase page in browser
@@ -101,7 +102,6 @@ agent-optimizer optimize --profile aggressive      # Maximum token savings
 agent-optimizer optimize --only heartbeat          # Fix only heartbeat
 agent-optimizer optimize --only context,pruning    # Fix specific areas
 agent-optimizer optimize --skip subagents          # Fix everything except subagents
-agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer activate AO-XXXX-XXXXXXXX-XXXXXXXX # Activate license
 agent-optimizer deactivate                         # Remove license
 ```
@@ -125,11 +125,11 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 | `drift` | Full results | Full results | Full results | Full results |
 | `snapshot` | Save & list | Save & list | Save & list | Save & list |
 | `fleet --hosts` | - | - | SSH fleet audit | SSH fleet audit |
-| `rollback` | - | Yes | Yes | Yes |
+| `rollback` | Yes | Yes | Yes | Yes |
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
-The free audit shows every issue and every fix instruction. A license lets the CLI apply fixes for you (`audit --fix`, `optimize`) and enables `rollback`.
+The free audit shows every issue and every fix instruction. A license lets the CLI apply fixes for you (`audit --fix`, `optimize`). `rollback` works without a license.
 
 ## What It Audits
 
