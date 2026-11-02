@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3]
+
 ### Fixed
 
-- `agent-optimizer --help` now lists `rollback` under FREE instead of LICENSED, matching the README prose: rollback needs no licence, only applying fixes does. The README comparison table now shows rollback as available on Free too. Added a help-text regression test.
+- `agent-optimizer --help` now lists `rollback` under FREE instead of LICENSED, matching the README prose: rollback needs no licence, only applying fixes does. Added a help-text regression test (#27).
 
 ### Docs
 
-- Clarify command-triggered network use in the README, including opt-in monitoring payloads, scheduling and disable instructions; add a source-parsed monitor command documentation regression test.
-- Align SKILL.md network disclosures with the CLI and README: configured-registry update queries and global installs, reactivation, monitor run/disable POSTs (disable is best-effort), browser purchases, and fleet SSH; add offline regression tests.
-- Correct the README and SKILL.md pricing notes: every fix instruction is free, and the licence covers applying fixes (`audit --fix`, `optimize`), matching the 0.14.0 change; `rollback` needs no licence, and the README now lists it as free.
+- Clarify command-triggered network use in the README, including opt-in monitoring payloads, scheduling and disable instructions; add a source-parsed monitor command documentation regression test (#24).
+- Align SKILL.md network disclosures with the CLI and README: configured-registry update queries and global installs, reactivation, monitor run/disable POSTs (disable is best-effort), browser purchases, and fleet SSH; add offline regression tests (#25).
+- Correct the README and SKILL.md pricing notes: every fix instruction is free, and the licence covers applying fixes (`audit --fix`, `optimize`), matching the 0.14.0 change; `rollback` needs no licence, and the README comparison table now lists it as free (#26).
 
 ## [0.16.2]
 
