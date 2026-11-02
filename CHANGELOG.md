@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `agent-optimizer --help` now lists `rollback` under FREE instead of LICENSED, matching the README: rollback needs no licence, only applying fixes does. Added a help-text regression test.
+- `agent-optimizer --help` now lists `rollback` under FREE instead of LICENSED, matching the README prose: rollback needs no licence, only applying fixes does. The README comparison table now shows rollback as available on Free too. Added a help-text regression test.
 
 ### Docs
 
