@@ -57,6 +57,7 @@ program
       `    ${w("drift")}  ${d("[--name snapshot]")}                 ${d("Config drift detection")}`,
       `    ${w("snapshot save")} ${d("[--name golden]")}            ${d("Save config baseline")}`,
       `    ${w("rollback")} ${d("[--list] [--to <id>]")}              ${d("Restore a backup generation")}`,
+      `    ${w("plugin install")} ${d("[--enable]")}                ${d("Install the bundled OpenClaw plugin")}`,
       "",
       d("  LICENSED") + d(" (Solo £29+)"),
       `    ${w("audit --fix")}                              ${d("Auto-apply safe fixes")}`,
