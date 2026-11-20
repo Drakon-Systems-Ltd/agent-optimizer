@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-11-20
+
 ### Fixed
 
-- The Stripe checkout helper (`createCheckoutSession`) now turns off Stripe
-  Adaptive Pricing, so a session charges the GBP catalog price (£29, £79,
-  £149) instead of letting Stripe convert it to the buyer's local currency
-  (#2).
+- The Stripe checkout helper (`createCheckoutSession`) now requests the GBP
+  catalog amounts (£29, £79, £149) with Adaptive Pricing disabled. Added
+  regression coverage for all three tiers (#23; fixes #2).
+
+### Docs
+
+- `agent-optimizer --help` now lists `plugin install [--enable]`, matching
+  the existing plugin installation instructions. Added help-text regression
+  coverage (#29).
 
 ## [0.16.3]
 
