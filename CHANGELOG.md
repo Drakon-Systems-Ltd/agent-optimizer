@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Stripe checkout helper (`createCheckoutSession`) now turns off Stripe
+  Adaptive Pricing, so a session charges the GBP catalog price (£29, £79,
+  £149) instead of letting Stripe convert it to the buyer's local currency
+  (#2).
+
 ## [0.16.3]
 
 ### Fixed
