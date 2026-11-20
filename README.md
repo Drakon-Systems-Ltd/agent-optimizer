@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@drakon-systems/agent-optimizer?color=cc3534&label=npm)](https://www.npmjs.com/package/@drakon-systems/agent-optimizer)
 [![license](https://img.shields.io/badge/license-proprietary-cc3534)](LICENSE.md)
-[![tests](https://img.shields.io/badge/tests-839-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
+[![tests](https://img.shields.io/badge/tests-863-brightgreen)](https://github.com/Drakon-Systems-Ltd/agent-optimizer)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
 **Stop burning money on misconfigured OpenClaw agents.**
@@ -11,7 +11,7 @@ Audit, optimize, and secure your OpenClaw deployment. One install, one command, 
 
 **Free to install. Free to audit. Pay only when you want auto-fix.**
 
-**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 839 tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2.
+**Multi-system: Claude Code + OpenClaw + Hermes Agent (read-only).** 29 auditor modules, 863 tests, 25 optimize dimensions, real `audit --fix` auto-apply. Current to OpenClaw v2026.9.8 and Hermes Agent 0.21.2.
 
 ## Install
 
@@ -64,11 +64,33 @@ agent-optimizer optimize --dry-run --profile aggressive  # Preview aggressive pr
 agent-optimizer drift --name golden                # Compare config against snapshot
 agent-optimizer snapshot save --name golden        # Save config baseline
 agent-optimizer snapshot list                      # List saved snapshots
+agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer license                            # Show license status
 agent-optimizer update                             # Check for updates
 agent-optimizer buy                                # Open purchase page in browser
 agent-optimizer buy --tier solo                    # Pre-select Solo tier
 ```
+
+### Monitoring (free beta)
+
+Daily monitoring is opt-in, with a weekly email digest. Enrolment requires macOS or Linux with `crontab` available; it saves local state and installs a daily `monitor run` cron at 02:00 in the cron timezone. No background monitoring runs unless you enrol and install this cron (enrolment attempts installation automatically).
+
+```bash
+agent-optimizer monitor enroll <email> --name <name> # Enrol; name defaults to hostname
+agent-optimizer monitor run                         # Audit and POST a ping (also called by cron)
+agent-optimizer monitor status                      # Show local enrolment and cron status; no POST
+agent-optimizer monitor test                        # Preview the audit payload; no POST
+agent-optimizer monitor disable                     # Notify server, remove cron and local state
+agent-optimizer monitor install-cron                # Recover a missing cron after enrolment; no POST
+```
+
+`enroll`, `run`, and `test` accept `-c, --config <path>` (default `~/.openclaw/openclaw.json`). The installed cron uses the default path, not an enrolment-time `--config` override. If cron installation fails after enrolment, use `monitor install-cron` to recover or `monitor run` manually.
+
+Monitoring POSTs go to `https://drakonsystems.com` by default (`AGENT_OPTIMIZER_API_BASE` can override this at enrolment; the server address is saved locally):
+
+- `/api/agent-optimizer/monitor/enroll` registers enrolment with `email`, `agentName` (the supplied name or hostname), and `openclawVersion` (or `unknown`).
+- `/api/agent-optimizer/monitor/ping` sends the audit result when `monitor run` is invoked after enrolment: `token`, `timestamp`, `openclawVersion`, `healthScore`, `summary` containing `pass`, `warn`, `fail`, `info`, `total`, and `issues` containing `category`, `check`, `status` for every result. It does not send full config files, finding messages or fix text.
+- `/api/agent-optimizer/monitor/disable` sends `token` to disable monitoring on the server (best-effort), then removes the local cron and enrolment state. Run `agent-optimizer monitor disable` to stop monitoring; local cleanup still proceeds if the server request fails.
 
 ### Licensed Commands (Solo £29+)
 
@@ -80,7 +102,6 @@ agent-optimizer optimize --profile aggressive      # Maximum token savings
 agent-optimizer optimize --only heartbeat          # Fix only heartbeat
 agent-optimizer optimize --only context,pruning    # Fix specific areas
 agent-optimizer optimize --skip subagents          # Fix everything except subagents
-agent-optimizer rollback                           # Restore the last optimize/fix backup
 agent-optimizer activate AO-XXXX-XXXXXXXX-XXXXXXXX # Activate license
 agent-optimizer deactivate                         # Remove license
 ```
@@ -96,7 +117,7 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 
 | Command | Free | Solo (£29) | Fleet (£79) | Lifetime (£149) |
 |---------|------|------------|-------------|-----------------|
-| `audit` (70+ checks) | Results + 3 fixes | All fixes | All fixes | All fixes |
+| `audit` (70+ checks) | All fix instructions | All fix instructions | All fix instructions | All fix instructions |
 | `audit --fix` | Shows issues | Auto-fixes | Auto-fixes | Auto-fixes |
 | `scan` (28 patterns) | Full results | Full results | Full results | Full results |
 | `optimize --dry-run` | Preview | Preview | Preview | Preview |
@@ -104,11 +125,11 @@ agent-optimizer fleet --hosts jarvis,edith --json  # Fleet audit as JSON
 | `drift` | Full results | Full results | Full results | Full results |
 | `snapshot` | Save & list | Save & list | Save & list | Save & list |
 | `fleet --hosts` | - | - | SSH fleet audit | SSH fleet audit |
-| `rollback` | - | Yes | Yes | Yes |
+| `rollback` | Yes | Yes | Yes | Yes |
 | Updates | - | 12 months | 12 months | 12 months |
 | Priority support | - | - | - | Yes |
 
-The free audit shows every issue and the first 3 fix instructions. A license unlocks all fix instructions, auto-fix, and optimization profiles.
+The free audit shows every issue and every fix instruction. A license lets the CLI apply fixes for you (`audit --fix`, `optimize`). `rollback` works without a license.
 
 ## What It Audits
 
@@ -280,7 +301,13 @@ agent-optimizer deactivate                         # Remove
 
 Purchase at [drakonsystems.com/products/agent-optimizer](https://drakonsystems.com/products/agent-optimizer).
 
-Licenses are RSA-signed and verified offline — no phone-home, no telemetry, no account required. The only network call is the one-time activation.
+Licenses are RSA-signed and verified offline; no account is required. Network use is command-triggered:
+
+- `activate <key>` makes one POST to `https://drakonsystems.com/api/agent-optimizer/activate` per invocation, sending the key and optional email to obtain a signed license. Subsequent license verification is local; reactivation makes another request.
+- Opt-in `monitor enroll`, `monitor run`, and `monitor disable` POST to the monitoring server (details above). Scheduled pings start only after you enrol and a monitoring cron is installed.
+- `update` queries the configured npm registry for the latest version and runs a global npm install when that version differs from the installed one.
+- `buy` opens the Drakon purchase page in your browser with the selected tier; the browser handles the network request.
+- `fleet --hosts <hosts>` connects over SSH to the hosts you specify to read OpenClaw config and model overrides and check gateway service status.
 
 Every licensed command requires the server-issued RS256 token in `~/.agent-optimizer/license.json` to verify against the public key embedded in the CLI. Tier and expiry come from the signed token; the readable `data` fields beside it can never grant more. Their `tier` and `email` must match the signed claims, and their `expiresAt` can only shorten validity, never extend it past the signed expiry. Editing tier or email (or removing the token) makes the license invalid rather than upgrading it. If `agent-optimizer license` reports an invalid signature for a key you bought, run `agent-optimizer activate <key>` again to fetch a fresh signed license.
 

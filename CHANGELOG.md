@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3]
+
+### Fixed
+
+- `agent-optimizer --help` now lists `rollback` under FREE instead of LICENSED, matching the README prose: rollback needs no licence, only applying fixes does. Added a help-text regression test (#27).
+
+### Docs
+
+- Clarify command-triggered network use in the README, including opt-in monitoring payloads, scheduling and disable instructions; add a source-parsed monitor command documentation regression test (#24).
+- Align SKILL.md network disclosures with the CLI and README: configured-registry update queries and global installs, reactivation, monitor run/disable POSTs (disable is best-effort), browser purchases, and fleet SSH; add offline regression tests (#25).
+- Correct the README and SKILL.md pricing notes: every fix instruction is free, and the licence covers applying fixes (`audit --fix`, `optimize`), matching the 0.14.0 change; `rollback` needs no licence, and the README comparison table now lists it as free (#26).
+
+## [0.16.2]
+
 ### Fixed
 
 - The Stripe checkout helper (`createCheckoutSession`) now turns off Stripe
@@ -17,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `discovery.enabled` switch whenever the key is present, including an explicit
   `null`, matching OpenClaw's own migration. Previously a `null` value produced
   no retirement advice (#19).
+
+### Changed
+
+- New releases are published to npm automatically from GitHub Actions when the
+  GitHub release is published, using npm trusted publishing (no stored npm
+  token). The workflow runs the same build, test and package checks as CI and
+  publishes the exact tarball it checked (#20).
 
 ### Documentation
 
